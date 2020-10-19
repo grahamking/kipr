@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -60,19 +61,18 @@ struct Args {
 impl Args {
     // Command to get a password
     fn cmd_get(&self) {
-        return show(&self.filepart, self.is_print).unwrap();
+        if let Err(e) = show(&self.filepart, self.is_print) {
+            eprintln!("get failed: {}", e);
+        }
     }
 }
 
 // Display accounts details for name, and put password on clipboard
 fn show(name: &str, is_visible: bool) -> anyhow::Result<()> {
-    let entry = match find(name) {
-        Some(filename) => {
-            println!("found {}", filename.to_str().unwrap());
-            extract(filename)?
-        }
+    let entry = match find(name)? {
+        Some(filename) => extract(filename)?,
         None => {
-            return Err(anyhow::anyhow!("File not found: {}", name));
+            return Err(anyhow!("File not found: {}", name));
         }
     };
     println!("{}", bold(&entry.username));
@@ -87,21 +87,59 @@ fn show(name: &str, is_visible: bool) -> anyhow::Result<()> {
 }
 
 // Find a file matching 'name', prompting for user's help if needed.
-// Can raise IOError  - caller must handle it.
-fn find(name: &str) -> Option<path::PathBuf> {
-    let filename = path::Path::new(HOME_PWD).join(name);
-    if let Err(_) = filename.metadata() {
-        println!("dunno");
+fn find(name: &str) -> anyhow::Result<Option<path::PathBuf>> {
+    let mut filepath = path::Path::new(HOME_PWD).join(name);
+    if let Err(_) = filepath.metadata() {
+        filepath = guess(name)?;
 
-        // TODO: work here
-
-        //filename = guess(name)
-        //basename = os.path.basename(filename)
-        //print('Guessing {}'.format(bold(basename)))
-        return None;
+        let basename = filepath.as_path().file_name().unwrap().to_str().unwrap();
+        println!("Guessing {}", bold(basename));
     }
 
-    Some(filename)
+    Ok(Some(filepath))
+}
+
+// Guess filename from part of name
+fn guess(name: &str) -> anyhow::Result<path::PathBuf> {
+    let search_glob = &format!("{}/*{}*", HOME_PWD, name);
+    let mut globs = glob::glob(search_glob)?;
+    let first = globs.next();
+    if first.is_none() {
+        return Err(anyhow!("File not found: {}", name));
+    }
+    Ok(first.unwrap().unwrap())
+
+    // TODO: work here. if there are more than 1 matches, ask user
+
+    //for e in globs {
+
+    /*
+    if len(globs) == 1:
+        res = globs[0]
+        return res
+    elif len(globs) > 1:
+        print('Did you mean:')
+        index = 0
+        for option in globs:
+            print('{} - {}'.format(index, os.path.basename(option)))
+            index += 1
+        try:
+            try:
+                choice = raw_input("Select a choice ? ")
+            except NameError:
+                # python 3
+                choice = input("Select a choice ? ")
+            if choice:
+                try:
+                    choice = int(choice)
+                    return globs[choice]
+                except ValueError:
+                    print("The choice must be an integer")
+        except KeyboardInterrupt:
+            print('\nKeyboardInterrupt\n')
+
+    raise IOError()
+    */
 }
 
 #[derive(Debug)]
