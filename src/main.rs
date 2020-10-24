@@ -1,9 +1,22 @@
 use anyhow::anyhow;
+use anyhow::Context;
+use configparser::ini::Ini;
 use std::env;
 use std::fs;
+use std::io;
 use std::io::Write;
 use std::path;
 use std::process;
+
+const _DEFAULT_CONFIG: &str = "
+[gnupg]
+key_fingerprint:
+encrypt_cmd:gpg --quiet --encrypt --sign --default-recipient-self --armor
+decrypt_cmd:gpg --quiet --decrypt
+[passwords]
+home:~/.kip/passwords
+len:19
+";
 
 // HOME_PWD = os.path.expanduser(config.get('passwords', 'home'))
 const HOME_PWD: &str = "/home/graham/.kip/passwords";
@@ -17,6 +30,8 @@ const DECRYPT_CMD: &str = "gpg --quiet --decrypt";
 const CLIP_CMD: &str = "xclip";
 
 fn main() {
+    //load_config();
+
     let args_vec = env::args().collect();
     let args = parse_args(args_vec);
 
@@ -39,6 +54,23 @@ fn main() {
 
     return retcode
     */
+}
+
+fn _load_config() {
+    // TODO WORK HERE
+    // Modify https://github.com/QEDK/configparser-rs to accept ":" as delimiter
+
+    let mut config = Ini::new();
+
+    // built-in defaults
+    let conf = config.read(String::from(_DEFAULT_CONFIG));
+    println!("{:?}", conf)
+
+    // global defaults
+    ////let map = config.load("/etc/kip/kip.conf");
+
+    // user overrides
+    //config,load(os.path.expanduser('~/.kip/kip.conf'))
 }
 
 fn parse_args(args: Vec<String>) -> Args {
@@ -91,7 +123,6 @@ fn find(name: &str) -> anyhow::Result<Option<path::PathBuf>> {
     let mut filepath = path::Path::new(HOME_PWD).join(name);
     if let Err(_) = filepath.metadata() {
         filepath = guess(name)?;
-
         let basename = filepath.as_path().file_name().unwrap().to_str().unwrap();
         println!("Guessing {}", bold(basename));
     }
@@ -102,44 +133,29 @@ fn find(name: &str) -> anyhow::Result<Option<path::PathBuf>> {
 // Guess filename from part of name
 fn guess(name: &str) -> anyhow::Result<path::PathBuf> {
     let search_glob = &format!("{}/*{}*", HOME_PWD, name);
-    let mut globs = glob::glob(search_glob)?;
-    let first = globs.next();
-    if first.is_none() {
-        return Err(anyhow!("File not found: {}", name));
+    let mut globs: Vec<path::PathBuf> = glob::glob(search_glob)?.filter_map(Result::ok).collect();
+    match globs.len() {
+        0 => Err(anyhow!("File not found: {}", name)),
+        1 => Ok(globs.remove(0)),
+        _ => {
+            println!("Did you mean:");
+            for (index, option) in globs.iter().enumerate() {
+                let fname = option.as_path().file_name().unwrap();
+                println!("{} - {}", index, fname.to_str().unwrap())
+            }
+            io::stdout().write(b"Select a choice ? ")?;
+            io::stdout().flush()?;
+            let mut choice_str = String::new();
+            io::stdin().read_line(&mut choice_str).unwrap();
+            let choice_int: usize = choice_str.trim().parse().with_context(|| {
+                format!("The choice must be a number, not '{}'", choice_str.trim())
+            })?;
+            if choice_int >= globs.len() {
+                return Err(anyhow!("Select a number 0-{}", globs.len() - 1));
+            }
+            Ok(globs.remove(choice_int))
+        }
     }
-    Ok(first.unwrap().unwrap())
-
-    // TODO: work here. if there are more than 1 matches, ask user
-
-    //for e in globs {
-
-    /*
-    if len(globs) == 1:
-        res = globs[0]
-        return res
-    elif len(globs) > 1:
-        print('Did you mean:')
-        index = 0
-        for option in globs:
-            print('{} - {}'.format(index, os.path.basename(option)))
-            index += 1
-        try:
-            try:
-                choice = raw_input("Select a choice ? ")
-            except NameError:
-                # python 3
-                choice = input("Select a choice ? ")
-            if choice:
-                try:
-                    choice = int(choice)
-                    return globs[choice]
-                except ValueError:
-                    print("The choice must be an integer")
-        except KeyboardInterrupt:
-            print('\nKeyboardInterrupt\n')
-
-    raise IOError()
-    */
 }
 
 #[derive(Debug)]
