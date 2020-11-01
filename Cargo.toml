@@ -9,4 +9,4 @@ edition = "2018"
 [dependencies]
 anyhow = "1"
 glob = "0.3"
-configparser = "1.0.0"
+configparser = { path = "/home/graham/src/configparser-rs" }
