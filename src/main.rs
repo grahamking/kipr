@@ -1,12 +1,15 @@
-use anyhow::anyhow;
-use anyhow::Context;
-use configparser::ini::Ini;
-use std::env::{args, var};
+use std::env::var;
 use std::fs;
 use std::io;
 use std::io::Write;
 use std::path;
 use std::process;
+
+use anyhow::anyhow;
+use anyhow::Context;
+use clap;
+use clap::{crate_authors, crate_description, crate_name, crate_version};
+use configparser::ini::Ini;
 
 mod config;
 
@@ -25,35 +28,24 @@ clip:xclip
 
 fn main() {
     let conf = load_config();
-
-    let args_vec = args().collect();
-    let args = parse_args(args_vec);
-
+    let args = parse_args();
     println!("Args: {:?}", args);
 
-    let kip = Kip { conf, args };
-    kip.cmd_get();
-
-    // TODO WORK HERE
-    // 'add' cmd
-
     /*
-    if not args:
-        return 1
-
     // Ensure our home directory exists
     let d = conf.dir();
     if not os.path.exists(d):
         os.makedirs(d)
-
-    if args.cmd not in CMDS:
-        args.filepart = args.cmd
-        args.cmd = "get"
-
-    retcode = CMDS[args.cmd](args)
-
-    return retcode
     */
+
+    let kip = Kip { conf, args };
+    kip.run();
+
+    // TODO: implement
+    // - add
+    // - edit
+    // - list
+    // - del
 }
 
 fn load_config() -> config::Config {
@@ -82,25 +74,123 @@ fn load_config() -> config::Config {
     conf
 }
 
-fn parse_args(args: Vec<String>) -> Args {
-    return Args {
-        cmd: String::from("get"),
-        username: String::from(""),
-        filepart: String::from(&args[1]),
-        is_print: false,
-    };
+fn parse_args() -> Args {
+    let a = define_args();
+    let matches = a.get_matches();
+
+    if let Some(f) = matches.value_of("filepart") {
+        // Usage: kip <name>
+        return Args::new_short(String::from(f));
+    }
+    // Usage: kip cmd <name>
+    match matches.subcommand() {
+        ("get", Some(m)) => {
+            return Args::new_short(String::from(m.value_of("filepart").unwrap()));
+        }
+        ("add", Some(m)) => {
+            return Args {
+                cmd: String::from("add"),
+                filepart: String::from(m.value_of("filepart").unwrap()),
+                // TODO: username should be Option<String>, prompt on add if None
+                username: String::from(m.value_of("username").unwrap_or("")),
+                is_print: m.is_present("is_print"),
+                is_prompt: m.is_present("is_prompt"),
+                notes: String::from(m.value_of("notes").unwrap_or("")), // TODO Option
+            };
+        }
+        _ => panic!("unknown command"),
+        // maybe: a.print_help()
+    }
 }
+
+fn define_args<'a, 'b>() -> clap::App<'a, 'b> {
+    let filepart = clap::Arg::with_name("filepart")
+        .help("Filename to display, or part thereof")
+        .required(true);
+
+    // GET
+
+    let cmd_get = clap::SubCommand::with_name("get")
+        .about(
+            "kipr get ebay.com
+ Decrypts {home}ebay.com using gpg
+ Copies password (first line) to clipboard
+ Echoes ebay username and notes (other lines)
+",
+        )
+        .arg(filepart.clone())
+        .arg(
+            clap::Arg::with_name("is_print")
+                .long("print")
+                .help("Display password instead of copying to clipboard"),
+        );
+
+    // ADD
+
+    let cmd_add = clap::SubCommand::with_name("add")
+        .about(
+            "kipr add ebay.com --username graham_king --notes 'And some notes'
+ Generate random password (pwgen -s1 19)
+ Creates file {home}ebay.com with format:
+    pw
+    username
+    notes
+ Encrypts and signs it with gpg.
+",
+        )
+        .arg(filepart.clone())
+        .arg(
+            clap::Arg::with_name("username")
+                .short("u")
+                .long("username")
+                .takes_value(true)
+                .help("Username to store. Will prompt if not given."),
+        )
+        .arg(
+            clap::Arg::with_name("is_prompt")
+                .short("p")
+                .long("prompt")
+                .help("Prompt for password on command line instead of generating it"),
+        )
+        .arg(
+            clap::Arg::with_name("notes")
+                .short("n")
+                .long("notes")
+                .takes_value(true)
+                .help("Notes - anything you want"),
+        );
+
+    clap::app_from_crate!()
+        .setting(clap::AppSettings::ArgRequiredElseHelp)
+        .setting(clap::AppSettings::SubcommandsNegateReqs)
+        .arg(filepart.clone())
+        .subcommand(cmd_get)
+        .subcommand(cmd_add)
+}
+
+// TODO: Args should be an enum, with different commands having different fields
 
 #[derive(Debug)]
 struct Args {
     cmd: String,
-    username: String,
+    username: String, // TODO: should be Option<String>
     filepart: String,
     is_print: bool,
+    is_prompt: bool,
+    notes: String,
 }
 
 impl Args {
-    // Command to get a password
+    fn new_short(filepart: String) -> Args {
+        Args {
+            filepart,
+            cmd: String::from("get"),
+            username: String::from(""),
+            is_print: false,
+            is_prompt: false,
+            notes: String::from(""),
+        }
+    }
 }
 
 struct Kip {
@@ -109,10 +199,22 @@ struct Kip {
 }
 
 impl Kip {
+    fn run(&self) {
+        match self.args.cmd.as_str() {
+            "get" => self.cmd_get(),
+            "add" => self.cmd_add(),
+            _ => println!("Unknown command"),
+        }
+    }
+
     fn cmd_get(&self) {
         if let Err(e) = self.show(&self.args.filepart, self.args.is_print) {
             eprintln!("get failed: {}", e);
         }
+    }
+
+    fn cmd_add(&self) {
+        println!("I am cmd add!");
     }
 
     // Display accounts details for name, and put password on clipboard
