@@ -103,7 +103,9 @@ fn parse_args() -> Args {
     }
 }
 
-fn define_args<'a, 'b>() -> clap::App<'a, 'b> {
+// 'static lifetime says how long the app name, description etc strings live. We get them from
+// app_from_crate! macro, so they are static.
+fn define_args() -> clap::App<'static, 'static> {
     let filepart = clap::Arg::with_name("filepart")
         .help("Filename to display, or part thereof")
         .required(true);
