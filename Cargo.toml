@@ -12,3 +12,5 @@ anyhow = "1"
 clap = "2.33"
 configparser = { path = "/home/graham/src/configparser-rs" }
 glob = "0.3"
+rpassword = "5.0"
+rand = "0.7"

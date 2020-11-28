@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env::var;
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct Config(HashMap<String, HashMap<String, String>>);
@@ -9,18 +10,31 @@ impl Config {
         Config(HashMap::new())
     }
 
-    pub fn dir(&self) -> String {
-        // TODO &str pointing into our hashmap
+    pub fn dir(&self) -> &Path {
         let section_pw = self.0.get("passwords").unwrap();
-        String::from(section_pw.get("home").unwrap())
+        Path::new(section_pw.get("home").unwrap())
     }
 
-    pub fn decrypt_cmd(&self) -> String {
-        String::from(self.0.get("gnupg").unwrap().get("decrypt_cmd").unwrap())
+    pub fn encrypt_cmd(&self) -> &str {
+        self.0.get("gnupg").unwrap().get("encrypt_cmd").unwrap()
     }
 
-    pub fn clip_cmd(&self) -> String {
-        String::from(self.0.get("tools").unwrap().get("clip").unwrap())
+    pub fn decrypt_cmd(&self) -> &str {
+        self.0.get("gnupg").unwrap().get("decrypt_cmd").unwrap()
+    }
+
+    pub fn clip_cmd(&self) -> &str {
+        self.0.get("tools").unwrap().get("clip").unwrap()
+    }
+
+    pub fn pw_len(&self) -> usize {
+        self.0
+            .get("passwords")
+            .unwrap()
+            .get("len")
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 
     pub fn add(&mut self, v: HashMap<String, HashMap<String, Option<String>>>) {
