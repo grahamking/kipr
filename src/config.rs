@@ -51,7 +51,7 @@ impl Config {
                     section.remove(&k_name);
                 }
             }
-            self.0.insert(String::from(s_name), section);
+            self.0.insert(s_name, section);
         }
     }
 }

@@ -30,7 +30,7 @@ clip:xclip
 fn main() -> Result<(), anyhow::Error> {
     let conf = load_config();
     let args = args::parse_args();
-    println!("Args: {:?}", args);
+    //println!("Args: {:?}", args);
 
     // Ensure our home directory exists
     let d = conf.dir();
@@ -42,9 +42,8 @@ fn main() -> Result<(), anyhow::Error> {
     let kip = Kip { conf, args };
     kip.run()?;
 
-    // TODO: implement
+    // TODO: implement (add in args.rs)
     // - edit
-    // - list
     // - del
 
     Ok(())
@@ -59,17 +58,14 @@ fn load_config() -> config::Config {
     conf.add(hm.unwrap());
 
     // global defaults
-    let hm = conf_files.load(&"/etc/kip/kip.conf");
-    if hm.is_ok() {
-        conf.add(hm.unwrap());
+    if let Ok(hm) = conf_files.load(&"/etc/kip/kip.conf") {
+        conf.add(hm);
     }
 
     // user overrides
-    let home = var("HOME");
-    if home.is_ok() {
-        let hm = conf_files.load(&(home.unwrap() + "/.kip/kip.conf"));
-        if hm.is_ok() {
-            conf.add(hm.unwrap());
+    if let Ok(home) = var("HOME") {
+        if let Ok(hm) = conf_files.load(&(home + "/.kip/kip.conf")) {
+            conf.add(hm);
         }
     }
 
@@ -86,13 +82,14 @@ impl Kip {
         match self.args.cmd.as_str() {
             "get" => self.cmd_get(),
             "add" => self.cmd_add(),
+            "list" => self.cmd_list(),
             _ => Err(anyhow!("Unknown command")),
         }
     }
 
     // Command to get a password
     fn cmd_get(&self) -> anyhow::Result<()> {
-        if let Err(e) = self.show(&self.args.filepart, self.args.is_print) {
+        if let Err(e) = self.show(self.args.filepart.as_ref().unwrap(), self.args.is_print) {
             eprintln!("get failed: {}", e);
         }
         Ok(())
@@ -112,15 +109,49 @@ impl Kip {
         } else {
             generate_pw(self.conf.pw_len())
         };
-        self.create(&self.args.filepart, username, &self.args.notes, &pw)
+        self.create(
+            &self.args.filepart.as_ref().unwrap(),
+            username,
+            self.args.notes.as_ref(),
+            &pw,
+        )
     }
 
-    fn create(&self, name: &str, username: &str, notes: &str, pw: &str) -> anyhow::Result<()> {
+    // Command to list accounts
+    fn cmd_list(&self) -> anyhow::Result<()> {
+        let prefix = if self.args.filepart.is_some() {
+            self.args.filepart.as_ref().unwrap()
+        } else {
+            ""
+        };
+        let list_glob = self.conf.dir().join(format!("{}*", prefix));
+        println!("Listing {}:", bold(list_glob.to_str().unwrap()));
+        let mut files: Vec<path::PathBuf> = glob::glob(list_glob.to_str().unwrap())?
+            .filter_map(Result::ok)
+            .collect();
+        files.sort();
+        for f in files {
+            println!("{}", f.as_path().file_name().unwrap().to_string_lossy());
+        }
+        Ok(())
+    }
+
+    fn create(
+        &self,
+        name: &str,
+        username: &str,
+        notes: Option<&String>,
+        pw: &str,
+    ) -> anyhow::Result<()> {
+        let n = match notes {
+            None => "",
+            Some(nn) => nn,
+        };
         let file_contents = format!(
             "{password}\n{username}\n{notes}\n",
             password = pw,
             username = username,
-            notes = notes
+            notes = n
         );
         let enc = self.encrypt(&file_contents)?;
 
@@ -135,7 +166,7 @@ impl Kip {
         }
 
         let mut enc_file = fs::File::create(dest_filename)?;
-        enc_file.write(enc.as_bytes())?;
+        enc_file.write_all(enc.as_bytes())?;
 
         // Now show, because often we do this when signing
         // up for a site, so need pw on clipboard
@@ -164,7 +195,7 @@ impl Kip {
     // Find a file matching 'name', prompting for user's help if needed.
     fn find(&self, name: &str) -> anyhow::Result<Option<path::PathBuf>> {
         let mut filepath = self.conf.dir().join(name);
-        if let Err(_) = filepath.metadata() {
+        if filepath.metadata().is_err() {
             filepath = self.guess(name)?;
             let basename = filepath.as_path().file_name().unwrap().to_str().unwrap();
             println!("Guessing {}", bold(basename));
@@ -188,7 +219,7 @@ impl Kip {
                     let fname = option.as_path().file_name().unwrap();
                     println!("{} - {}", index, fname.to_str().unwrap())
                 }
-                io::stdout().write(b"Select a choice ? ")?;
+                io::stdout().write_all(b"Select a choice ? ")?;
                 io::stdout().flush()?;
                 let mut choice_str = String::new();
                 io::stdin().read_line(&mut choice_str).unwrap();
@@ -277,7 +308,7 @@ fn bold(msg: &str) -> String {
 }
 
 fn ask(msg: &str) -> anyhow::Result<String> {
-    io::stdout().write(msg.as_bytes())?;
+    io::stdout().write_all(msg.as_bytes())?;
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).unwrap();
