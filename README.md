@@ -1,23 +1,17 @@
-`kipr` is a Rust port of [kip](https://github.com/grahamking/kip) (Python).
-
-# NAME
-
-kip - Keeps Internet Passwords. Password manager. Command line script to keep usernames and passwords in gnupg encrypted text files.
+**kip - Keeps Internet Passwords** Password manager. Command line script to keep usernames and passwords in gnupg encrypted text files.
 
 If you live on the command line, this is a simple, fast, secure, and evergreen way to manage your passwords. I use it multiple times a day.
 
-# SYNPOSIS
-
-kip get|add|list|edit|del [filepart] [--username USERNAME] [--notes NOTES] [--prompt] [--print]
+`kip get|add|list|edit|del [filepart] [--username USERNAME] [--notes NOTES] [--prompt] [--print]`
 
 # INSTALL
-
-Make sure you have a gnupg key pair:
-[GnuPG HOWTO](https://help.ubuntu.com/community/GnuPrivacyGuardHowto).
 
 - Linux x86_64: Download the pre-built binary from **Releases** in the sidebar.
 - Rust programmers: Clone the repo and `cargo build`.
 - Everyone else: Eh, I dunno. Open a ticket and say what OS you need.
+
+Make sure you have a gnupg key pair:
+[GnuPG HOWTO](https://help.ubuntu.com/community/GnuPrivacyGuardHowto).
 
 # COMMANDS
 
@@ -96,6 +90,8 @@ I was using the excellent [Keepass](http://en.wikipedia.org/wiki/KeePass) when I
 If you live in the command line, I think you will find **kip** makes your life a little bit better.
 
 If you put it in a sync-ed service (Dropbox, Google Drive, etc) you can have it on multiple computers. The files are encrypted, the service won't be able to spy on you.
+
+`kipr` is a Rust port of [kip](https://github.com/grahamking/kip) (Python).
 
 # FILES
 
