@@ -2,12 +2,32 @@ use std::collections::HashMap;
 use std::env::var;
 use std::path::Path;
 
+use configparser::ini::Ini;
+
+const DEFAULT_CONFIG: &str = "
+[gnupg]
+key_fingerprint:
+encrypt_cmd:gpg --quiet --encrypt --sign --default-recipient-self --armor
+decrypt_cmd:gpg --quiet --decrypt
+[passwords]
+home:~/.kip/passwords
+len:19
+[tools]
+clip: # empty means 'pbcopy' on OSX, 'xclip' elsewhere
+";
+
 #[derive(Debug)]
 pub struct Config(HashMap<String, HashMap<String, String>>);
 
 impl Config {
     pub fn new() -> Config {
-        Config(HashMap::new())
+        // built-in defaults - we always have these
+        let mut ini = Ini::new();
+        let hm = ini.read(String::from(DEFAULT_CONFIG));
+
+        let mut c = Config(HashMap::new());
+        c.add(hm.unwrap());
+        c
     }
 
     pub fn dir(&self) -> &Path {
@@ -24,7 +44,14 @@ impl Config {
     }
 
     pub fn clip_cmd(&self) -> &str {
-        self.0.get("tools").unwrap().get("clip").unwrap()
+        let c = self.0.get("tools").unwrap().get("clip").unwrap();
+        if c != "" {
+            c // user selected
+        } else if std::env::consts::OS == "macos" {
+            "pbcopy"
+        } else {
+            "xclip"
+        }
     }
 
     pub fn pw_len(&self) -> usize {

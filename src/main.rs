@@ -14,19 +14,6 @@ use rpassword::read_password_from_tty;
 mod args;
 mod config;
 
-const DEFAULT_CONFIG: &str = "
-[gnupg]
-key_fingerprint:
-encrypt_cmd:gpg --quiet --encrypt --sign --default-recipient-self --armor
-decrypt_cmd:gpg --quiet --decrypt
-[passwords]
-home:~/.kip/passwords
-len:19
-[tools]
-clip:xclip
-";
-// TODO: clip (above) should be 'pbcopy' if sys.platform == 'darwin'
-
 fn main() -> Result<(), anyhow::Error> {
     let conf = load_config();
     let args = args::parse_args();
@@ -47,11 +34,9 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn load_config() -> config::Config {
     let mut conf_files = Ini::new();
-    let mut conf = config::Config::new();
 
-    // built-in defaults - we always have these
-    let hm = conf_files.read(String::from(DEFAULT_CONFIG));
-    conf.add(hm.unwrap());
+    // This includes built-in defaults
+    let mut conf = config::Config::new();
 
     // global defaults
     if let Ok(hm) = conf_files.load(&"/etc/kip/kip.conf") {
@@ -329,7 +314,9 @@ fn execute(cmd: &str, data_in: Option<&str>, has_out: bool) -> anyhow::Result<St
     if data_in.is_some() {
         proc.stdin(process::Stdio::piped());
     }
-    let mut child = proc.spawn()?;
+    let mut child = proc
+        .spawn()
+        .with_context(|| format!("executing '{}'", cmd))?;
     if data_in.is_some() {
         let stdin = child.stdin.as_mut().unwrap();
         stdin.write_all(data_in.unwrap().as_bytes())?;
