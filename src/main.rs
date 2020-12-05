@@ -104,12 +104,14 @@ impl Kip {
     // Command to edit an existing entry
     fn cmd_edit(&self) -> anyhow::Result<()> {
         let name = &self.args.filepart.as_ref().unwrap();
-        let entry = match self.find(name)? {
-            Some(filename) => self.extract(filename)?,
+        let filename = self.find(name)?;
+        let entry = match filename.as_ref() {
+            Some(fname) => self.extract(&fname)?,
             None => {
                 return Err(anyhow!("File not found: {}", name));
             }
         };
+        let filename = filename.unwrap();
         let username = match &self.args.username {
             Some(m) => m,
             None => &entry.username,
@@ -123,7 +125,13 @@ impl Kip {
             Some(m) => m,
             None => &entry.notes,
         };
-        self.create(name, &username, Some(&notes), &pw, true)
+        self.create(
+            &filename.to_string_lossy(),
+            &username,
+            Some(&notes),
+            &pw,
+            true,
+        )
     }
 
     // Command to delete an existing entry
@@ -202,7 +210,7 @@ impl Kip {
     // Display accounts details for name, and put password on clipboard
     fn show(&self, name: &str, is_visible: bool) -> anyhow::Result<()> {
         let entry = match self.find(name)? {
-            Some(filename) => self.extract(filename)?,
+            Some(filename) => self.extract(&filename)?,
             None => {
                 return Err(anyhow!("File not found: {}", name));
             }
@@ -262,7 +270,7 @@ impl Kip {
 
     // Extracts username, password and notes from given file,
     // and returns as tuple (username, password, notes).
-    fn extract(&self, filename: path::PathBuf) -> anyhow::Result<Entry> {
+    fn extract(&self, filename: &path::PathBuf) -> anyhow::Result<Entry> {
         let enc = fs::read_to_string(filename)?;
         let contents: String = self.decrypt(&enc)?;
         let mut parts = contents.split('\n');
