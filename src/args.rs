@@ -17,18 +17,23 @@ pub fn parse_args() -> Args {
 
     if let Some(f) = matches.value_of("filepart") {
         // Usage: kip <name>
-        return Args::new_get(String::from(f));
+        return Args::new_get(String::from(f), matches.is_present("is_print"));
     }
     // Usage: kip cmd [opts]
     match matches.subcommand() {
-        ("get", Some(m)) => {
-            return Args::new_get(String::from(m.value_of("filepart").unwrap()));
+        ("list", Some(m)) => {
+            return Args::new_list(m.value_of("filepart"));
         }
-        ("add", Some(m)) => {
+        ("get", Some(m)) => {
+            return Args::new_get(
+                String::from(m.value_of("filepart").unwrap()),
+                m.is_present("is_print"),
+            );
+        }
+        (add_edit, Some(m)) if add_edit == "add" || add_edit == "edit" => {
             let mut a = Args {
-                cmd: String::from("add"),
+                cmd: String::from(add_edit),
                 filepart: Some(String::from(m.value_of("filepart").unwrap())),
-                // TODO: username should be Option<String>, prompt on add if None
                 username: m.value_of("username").map(|s| String::from(s)),
                 is_print: m.is_present("is_print"),
                 is_prompt: m.is_present("is_prompt"),
@@ -39,8 +44,15 @@ pub fn parse_args() -> Args {
             }
             return a;
         }
-        ("list", Some(m)) => {
-            return Args::new_list(m.value_of("filepart"));
+        ("del", Some(m)) => {
+            return Args {
+                filepart: Some(String::from(m.value_of("filepart").unwrap())),
+                cmd: String::from("del"),
+                username: None,
+                is_print: false,
+                is_prompt: false,
+                notes: None,
+            }
         }
         _ => panic!("unknown command"),
         // maybe: a.print_help()
@@ -51,8 +63,11 @@ pub fn parse_args() -> Args {
 // app_from_crate! macro, so they are static.
 fn define_args() -> clap::App<'static, 'static> {
     let filepart = clap::Arg::with_name("filepart")
-        .help("Filename to display, or part thereof")
+        .help("Filename to act on, or part thereof")
         .required(true);
+    let is_print = clap::Arg::with_name("is_print")
+        .long("print")
+        .help("Display password instead of copying to clipboard");
 
     // GET
 
@@ -65,11 +80,7 @@ fn define_args() -> clap::App<'static, 'static> {
 ",
         )
         .arg(filepart.clone())
-        .arg(
-            clap::Arg::with_name("is_print")
-                .long("print")
-                .help("Display password instead of copying to clipboard"),
-        );
+        .arg(is_print.clone());
 
     // ADD
 
@@ -106,6 +117,13 @@ fn define_args() -> clap::App<'static, 'static> {
                 .help("Notes - anything you want"),
         );
 
+    // EDIT
+
+    let cmd_edit = cmd_add
+        .clone()
+        .name("edit")
+        .about("kipr edit ebay.com --username graham_king_2 --notes 'Edited notes'");
+
     // LIST
 
     let cmd_list = clap::SubCommand::with_name("list")
@@ -120,24 +138,33 @@ List accounts. Same as `ls` in pwd directory.
                 .required(false),
         );
 
+    // DEL
+
+    let cmd_del = clap::SubCommand::with_name("del")
+        .about("kipr del <filepart>")
+        .arg(filepart.clone());
+
     clap::app_from_crate!()
         .setting(clap::AppSettings::ArgRequiredElseHelp)
         .setting(clap::AppSettings::SubcommandsNegateReqs)
-        .arg(filepart.clone())
+        .arg(filepart)
+        .arg(is_print)
         .subcommand(cmd_get)
         .subcommand(cmd_add)
+        .subcommand(cmd_edit)
         .subcommand(cmd_list)
+        .subcommand(cmd_del)
 }
 
-// TODO: Args should be an enum, with different commands having different fields
+// TODO: Args should maybe an enum, with different commands having different fields
 
 impl Args {
-    fn new_get(filepart: String) -> Args {
+    fn new_get(filepart: String, is_print: bool) -> Args {
         Args {
             filepart: Some(filepart),
             cmd: String::from("get"),
             username: None,
-            is_print: false,
+            is_print: is_print,
             is_prompt: false,
             notes: None,
         }

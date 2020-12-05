@@ -20,7 +20,7 @@ key_fingerprint:
 encrypt_cmd:gpg --quiet --encrypt --sign --default-recipient-self --armor
 decrypt_cmd:gpg --quiet --decrypt
 [passwords]
-home:~/.kipr
+home:~/.kip/passwords
 len:19
 [tools]
 clip:xclip
@@ -41,10 +41,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     let kip = Kip { conf, args };
     kip.run()?;
-
-    // TODO: implement (add in args.rs)
-    // - edit
-    // - del
 
     Ok(())
 }
@@ -82,7 +78,9 @@ impl Kip {
         match self.args.cmd.as_str() {
             "get" => self.cmd_get(),
             "add" => self.cmd_add(),
+            "edit" => self.cmd_edit(),
             "list" => self.cmd_list(),
+            "del" => self.cmd_del(),
             _ => Err(anyhow!("Unknown command")),
         }
     }
@@ -99,7 +97,7 @@ impl Kip {
     fn cmd_add(&self) -> anyhow::Result<()> {
         let owned;
         let username = if self.args.username.is_some() {
-            self.args.username.as_ref().unwrap()
+            &self.args.username.as_ref().unwrap()
         } else {
             owned = ask("Username: ")?;
             &owned
@@ -114,7 +112,49 @@ impl Kip {
             username,
             self.args.notes.as_ref(),
             &pw,
+            false,
         )
+    }
+
+    // Command to edit an existing entry
+    fn cmd_edit(&self) -> anyhow::Result<()> {
+        let name = &self.args.filepart.as_ref().unwrap();
+        let entry = match self.find(name)? {
+            Some(filename) => self.extract(filename)?,
+            None => {
+                return Err(anyhow!("File not found: {}", name));
+            }
+        };
+        let username = match &self.args.username {
+            Some(m) => m,
+            None => &entry.username,
+        };
+        let pw = if self.args.is_prompt {
+            read_password_from_tty(Some("Password: "))?
+        } else {
+            entry.password
+        };
+        let notes = match &self.args.notes {
+            Some(m) => m,
+            None => &entry.notes,
+        };
+        self.create(name, &username, Some(&notes), &pw, true)
+    }
+
+    // Command to delete an existing entry
+    fn cmd_del(&self) -> anyhow::Result<()> {
+        let name = &self.args.filepart.as_ref().unwrap();
+        let filename = self.find(name)?;
+        if filename.is_none() {
+            return Err(anyhow!("File not found: {}", name));
+        }
+        let filename: path::PathBuf = filename.unwrap();
+        let y_n = ask(&format!("Delete {}? [y|N] ", filename.display()))?;
+        if !y_n.eq_ignore_ascii_case("y") {
+            println!("Not deleted");
+            return Ok(());
+        }
+        fs::remove_file(filename).context("remove_file")
     }
 
     // Command to list accounts
@@ -142,6 +182,7 @@ impl Kip {
         username: &str,
         notes: Option<&String>,
         pw: &str,
+        overwrite: bool,
     ) -> anyhow::Result<()> {
         let n = match notes {
             None => "",
@@ -156,7 +197,7 @@ impl Kip {
         let enc = self.encrypt(&file_contents)?;
 
         let dest_filename = self.conf.dir().join(name);
-        if dest_filename.exists() {
+        if dest_filename.exists() && !overwrite {
             println!("WARNING: {} already exists.", dest_filename.display());
             let mut choice = ask("Overwrite name? [y|N]")?;
             choice.make_ascii_lowercase();
