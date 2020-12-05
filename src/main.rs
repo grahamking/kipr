@@ -353,7 +353,7 @@ fn ask(msg: &str) -> anyhow::Result<String> {
 
 // A random password of given length
 fn generate_pw(length: usize) -> String {
-    let choices = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let rng = &mut rand::thread_rng();
     let mut pw = choices.chars().choose_multiple(rng, length);
     pw.shuffle(rng);
