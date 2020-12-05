@@ -4,7 +4,7 @@
 
 kip - Keeps Internet Passwords. Password manager. Command line script to keep usernames and passwords in gnupg encrypted text files.
 
-If you live on the command line, this is simple, fast, secure, and evergreen way to manage your passwords.
+If you live on the command line, this is a simple, fast, secure, and evergreen way to manage your passwords. I use it multiple times a day.
 
 # SYNPOSIS
 
