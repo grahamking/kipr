@@ -10,7 +10,7 @@ description = "Manage account details in GPG files"
 [dependencies]
 anyhow = "1"
 clap = "2.33"
-configparser = { path = "/home/graham/src/configparser-rs" }
 glob = "0.3"
 rpassword = "5.0"
 rand = "0.7"
+configparser = "3.0.2"
