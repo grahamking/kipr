@@ -45,7 +45,7 @@ impl Config {
 
     pub fn clip_cmd(&self) -> &str {
         let c = self.0.get("tools").unwrap().get("clip").unwrap();
-        if c != "" {
+        if !c.is_empty() {
             c // user selected
         } else if std::env::consts::OS == "macos" {
             "pbcopy"
@@ -66,16 +66,18 @@ impl Config {
 
     pub fn add(&mut self, v: HashMap<String, HashMap<String, Option<String>>>) {
         for (s_name, s_vals) in v {
-            let mut section = self.0.remove(&s_name).unwrap_or_else(|| HashMap::new());
+            let mut section = self.0.remove(&s_name).unwrap_or_default();
             for (k_name, k_opt) in s_vals {
-                if k_opt.is_some() {
-                    let mut k = k_opt.unwrap();
-                    if k.starts_with("~") {
-                        k = k.replace("~", &var("HOME").unwrap());
+                match k_opt {
+                    Some(mut k) => {
+                        if k.starts_with('~') {
+                            k = k.replace('~', var("HOME").as_ref().unwrap());
+                        }
+                        section.insert(k_name, k);
                     }
-                    section.insert(String::from(k_name), k);
-                } else {
-                    section.remove(&k_name);
+                    None => {
+                        section.remove(&k_name);
+                    }
                 }
             }
             self.0.insert(s_name, section);

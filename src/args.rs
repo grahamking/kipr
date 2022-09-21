@@ -1,5 +1,3 @@
-use clap;
-
 #[derive(Debug)]
 pub struct Args {
     pub cmd: String,
@@ -33,7 +31,7 @@ pub fn parse_args() -> Args {
             let mut a = Args {
                 cmd: String::from(add_edit),
                 filepart: Some(String::from(m.value_of("filepart").unwrap())),
-                username: m.value_of("username").map(|s| String::from(s)),
+                username: m.value_of("username").map(String::from),
                 is_print: m.is_present("is_print"),
                 is_prompt: m.is_present("is_prompt"),
                 notes: None,
@@ -41,7 +39,7 @@ pub fn parse_args() -> Args {
             if let Some(n) = m.value_of("notes") {
                 a.notes = Some(String::from(n));
             }
-            return a;
+            a
         }
         Some(("del", m)) => {
             return Args {
@@ -163,7 +161,7 @@ impl Args {
             filepart: Some(filepart),
             cmd: String::from("get"),
             username: None,
-            is_print: is_print,
+            is_print,
             is_prompt: false,
             notes: None,
         }
@@ -177,8 +175,8 @@ impl Args {
             is_prompt: false,
             notes: None,
         };
-        if filepart.is_some() {
-            a.filepart = Some(String::from(filepart.unwrap()));
+        if let Some(fp) = filepart {
+            a.filepart = Some(fp.to_string());
         }
         a
     }

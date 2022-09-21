@@ -82,7 +82,7 @@ impl Kip {
     fn cmd_add(&self) -> anyhow::Result<()> {
         let owned;
         let username = if self.args.username.is_some() {
-            &self.args.username.as_ref().unwrap()
+            self.args.username.as_ref().unwrap()
         } else {
             owned = ask("Username: ")?;
             &owned
@@ -93,7 +93,7 @@ impl Kip {
             generate_pw(self.conf.pw_len())
         };
         self.create(
-            &self.args.filepart.as_ref().unwrap(),
+            self.args.filepart.as_ref().unwrap(),
             username,
             self.args.notes.as_ref(),
             &pw,
@@ -106,7 +106,7 @@ impl Kip {
         let name = &self.args.filepart.as_ref().unwrap();
         let filename = self.find(name)?;
         let entry = match filename.as_ref() {
-            Some(fname) => self.extract(&fname)?,
+            Some(fname) => self.extract(fname)?,
             None => {
                 return Err(anyhow!("File not found: {}", name));
             }
@@ -127,8 +127,8 @@ impl Kip {
         };
         self.create(
             &filename.to_string_lossy(),
-            &username,
-            Some(&notes),
+            username,
+            Some(notes),
             &pw,
             true,
         )
@@ -280,21 +280,21 @@ impl Kip {
         Ok(Entry {
             username: username.to_string(),
             password: password.to_string(),
-            notes: notes,
+            notes,
         })
     }
 
     fn encrypt(&self, contents: &str) -> anyhow::Result<String> {
-        execute(&self.conf.encrypt_cmd(), Some(contents), true)
+        execute(self.conf.encrypt_cmd(), Some(contents), true)
     }
 
     fn decrypt(&self, contents: &str) -> anyhow::Result<String> {
-        execute(&self.conf.decrypt_cmd(), Some(contents), true)
+        execute(self.conf.decrypt_cmd(), Some(contents), true)
     }
 
     // Copy given message to clipboard
     fn copy_to_clipboard(&self, msg: &str) -> anyhow::Result<String> {
-        execute(&self.conf.clip_cmd(), Some(msg), false)
+        execute(self.conf.clip_cmd(), Some(msg), false)
     }
 }
 
