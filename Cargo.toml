@@ -9,7 +9,7 @@ description = "Manage account details in GPG files"
 
 [dependencies]
 anyhow = "1"
-clap = "2.33"
+clap = { version = "3", features = ["cargo"] }
 glob = "0.3"
 rpassword = "5.0"
 rand = "0.7"

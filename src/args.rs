@@ -1,5 +1,4 @@
 use clap;
-use clap::{crate_authors, crate_description, crate_name, crate_version};
 
 #[derive(Debug)]
 pub struct Args {
@@ -21,16 +20,16 @@ pub fn parse_args() -> Args {
     }
     // Usage: kip cmd [opts]
     match matches.subcommand() {
-        ("list", Some(m)) => {
+        Some(("list", m)) => {
             return Args::new_list(m.value_of("filepart"));
         }
-        ("get", Some(m)) => {
+        Some(("get", m)) => {
             return Args::new_get(
                 String::from(m.value_of("filepart").unwrap()),
                 m.is_present("is_print"),
             );
         }
-        (add_edit, Some(m)) if add_edit == "add" || add_edit == "edit" => {
+        Some((add_edit, m)) if add_edit == "add" || add_edit == "edit" => {
             let mut a = Args {
                 cmd: String::from(add_edit),
                 filepart: Some(String::from(m.value_of("filepart").unwrap())),
@@ -44,7 +43,7 @@ pub fn parse_args() -> Args {
             }
             return a;
         }
-        ("del", Some(m)) => {
+        Some(("del", m)) => {
             return Args {
                 filepart: Some(String::from(m.value_of("filepart").unwrap())),
                 cmd: String::from("del"),
@@ -61,7 +60,7 @@ pub fn parse_args() -> Args {
 
 // 'static lifetime says how long the app name, description etc strings live. We get them from
 // app_from_crate! macro, so they are static.
-fn define_args() -> clap::App<'static, 'static> {
+fn define_args() -> clap::App<'static> {
     let filepart = clap::Arg::with_name("filepart")
         .help("Filename to act on, or part thereof")
         .required(true);
@@ -98,20 +97,20 @@ fn define_args() -> clap::App<'static, 'static> {
         .arg(filepart.clone())
         .arg(
             clap::Arg::with_name("username")
-                .short("u")
+                .short('u')
                 .long("username")
                 .takes_value(true)
                 .help("Username to store. Will prompt if not given."),
         )
         .arg(
             clap::Arg::with_name("is_prompt")
-                .short("p")
+                .short('p')
                 .long("prompt")
                 .help("Prompt for password on command line instead of generating it"),
         )
         .arg(
             clap::Arg::with_name("notes")
-                .short("n")
+                .short('n')
                 .long("notes")
                 .takes_value(true)
                 .help("Notes - anything you want"),
