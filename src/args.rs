@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Args {
     pub cmd: String,
     pub username: Option<String>,
@@ -18,15 +18,11 @@ pub fn parse_args() -> Args {
     }
     // Usage: kip cmd [opts]
     match matches.subcommand() {
-        Some(("list", m)) => {
-            return Args::new_list(m.value_of("filepart"));
-        }
-        Some(("get", m)) => {
-            return Args::new_get(
-                String::from(m.value_of("filepart").unwrap()),
-                m.is_present("is_print"),
-            );
-        }
+        Some(("list", m)) => Args::new_list(m.value_of("filepart")),
+        Some(("get", m)) => Args::new_get(
+            String::from(m.value_of("filepart").unwrap()),
+            m.is_present("is_print"),
+        ),
         Some((add_edit, m)) if add_edit == "add" || add_edit == "edit" => {
             let mut a = Args {
                 cmd: String::from(add_edit),
@@ -41,16 +37,18 @@ pub fn parse_args() -> Args {
             }
             a
         }
-        Some(("del", m)) => {
-            return Args {
-                filepart: Some(String::from(m.value_of("filepart").unwrap())),
-                cmd: String::from("del"),
-                username: None,
-                is_print: false,
-                is_prompt: false,
-                notes: None,
-            }
-        }
+        Some(("del", m)) => Args {
+            filepart: Some(String::from(m.value_of("filepart").unwrap())),
+            cmd: String::from("del"),
+            username: None,
+            is_print: false,
+            is_prompt: false,
+            notes: None,
+        },
+        Some(("gen", _)) => Args {
+            cmd: "gen".to_string(),
+            ..Default::default()
+        },
         _ => panic!("unknown command"),
         // maybe: a.print_help()
     }
@@ -116,10 +114,10 @@ fn define_args() -> clap::App<'static> {
 
     // EDIT
 
-    let cmd_edit = cmd_add
-        .clone()
-        .name("edit")
-        .about("kipr edit ebay.com --username graham_king_2 --notes 'Edited notes'");
+    let cmd_edit = cmd_add.clone().name("edit").about(
+        "kipr edit ebay.com --username graham_king_2 --notes 'Edited notes --prompt'
+Change details in an account file. Only changes the part you provide.",
+    );
 
     // LIST
 
@@ -138,8 +136,18 @@ List accounts. Same as `ls` in pwd directory.
     // DEL
 
     let cmd_del = clap::SubCommand::with_name("del")
-        .about("kipr del <filepart>")
+        .about(
+            "kipr del <filepart>
+Delete an account file. Same as 'rm' in .kip/passwords/ dir.",
+        )
         .arg(filepart.clone());
+
+    // GEN
+
+    let cmd_gen = clap::SubCommand::with_name("gen").about(
+        "kipr gen
+Generate and print a password, and copy it to clipboard",
+    );
 
     clap::app_from_crate!()
         .setting(clap::AppSettings::ArgRequiredElseHelp)
@@ -151,6 +159,7 @@ List accounts. Same as `ls` in pwd directory.
         .subcommand(cmd_edit)
         .subcommand(cmd_list)
         .subcommand(cmd_del)
+        .subcommand(cmd_gen)
 }
 
 // TODO: Args should maybe an enum, with different commands having different fields

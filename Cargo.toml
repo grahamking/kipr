@@ -1,11 +1,9 @@
 [package]
 name = "kipr"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Graham King <graham@gkgk.org>"]
-edition = "2018"
+edition = "2021"
 description = "Manage account details in GPG files"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1"

@@ -39,7 +39,7 @@ fn load_config() -> config::Config {
     let mut conf = config::Config::new();
 
     // global defaults
-    if let Ok(hm) = conf_files.load(&"/etc/kip/kip.conf") {
+    if let Ok(hm) = conf_files.load("/etc/kip/kip.conf") {
         conf.add(hm);
     }
 
@@ -66,6 +66,7 @@ impl Kip {
             "edit" => self.cmd_edit(),
             "list" => self.cmd_list(),
             "del" => self.cmd_del(),
+            "gen" => self.cmd_gen(),
             _ => Err(anyhow!("Unknown command")),
         }
     }
@@ -99,6 +100,16 @@ impl Kip {
             &pw,
             false,
         )
+    }
+
+    // Command to generate and print a password, and copy to clipboard.
+    // Useful if you need a secure string not attached to an account,
+    // or to test kipr's password gen rules.
+    fn cmd_gen(&self) -> anyhow::Result<()> {
+        let pw = generate_pw(self.conf.pw_len());
+        self.copy_to_clipboard(&pw)?;
+        println!("{}", pw);
+        Ok(())
     }
 
     // Command to edit an existing entry
@@ -351,9 +362,11 @@ fn ask(msg: &str) -> anyhow::Result<String> {
     Ok(String::from(answer.trim()))
 }
 
-// A random password of given length
+// A random password of given length.
+// It uses a-z, A-Z, 0-9 and a subset of the special characters from here:
+// https://owasp.org/www-community/password-special-characters
 fn generate_pw(length: usize) -> String {
-    let choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./:;=>?@[]^_`{|}~";
     let rng = &mut rand::thread_rng();
     let mut pw = choices.chars().choose_multiple(rng, length);
     pw.shuffle(rng);
