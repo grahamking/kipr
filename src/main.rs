@@ -13,7 +13,7 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rpassword::read_password_from_tty;
 
 mod args;
-use args::{parse_args, Args};
+use args::{parse_args, Args, Print, Prompt};
 mod config;
 use config::Config;
 
@@ -79,7 +79,7 @@ fn run(conf: Config, args: args::Args) -> anyhow::Result<()> {
 }
 
 // Command to get a password
-fn cmd_get(conf: Config, filepart: &str, is_print: bool) -> anyhow::Result<()> {
+fn cmd_get(conf: Config, filepart: &str, is_print: Print) -> anyhow::Result<()> {
     if let Err(e) = show(conf, filepart, is_print) {
         eprintln!("get failed: {}", e);
     }
@@ -91,8 +91,8 @@ fn cmd_add(
     conf: Config,
     filepart: &str,
     username: Option<String>,
-    is_print: bool,
-    is_prompt: bool,
+    is_print: Print,
+    is_prompt: Prompt,
     notes: Option<String>,
 ) -> anyhow::Result<()> {
     let owned;
@@ -102,7 +102,7 @@ fn cmd_add(
         owned = ask("Username: ")?;
         &owned
     };
-    let pw = if is_prompt {
+    let pw = if is_prompt.0 {
         read_password_from_tty(Some("Password: "))?
     } else {
         generate_pw(conf.choices(), conf.pw_len())
@@ -123,7 +123,7 @@ fn cmd_add(
 // or to test kipr's password gen rules.
 fn cmd_gen(conf: Config) -> anyhow::Result<()> {
     let pw = generate_pw(conf.choices(), conf.pw_len());
-    copy_to_clipboard(&pw, conf.decrypt_cmd())?;
+    copy_to_clipboard(&pw, conf.clip_cmd())?;
     println!("{}", pw);
     Ok(())
 }
@@ -133,8 +133,8 @@ fn cmd_edit(
     conf: Config,
     name: &str,
     username: Option<String>,
-    is_print: bool,
-    is_prompt: bool,
+    is_print: Print,
+    is_prompt: Prompt,
     notes: Option<String>,
 ) -> anyhow::Result<()> {
     let filename = find(name, conf.dir())?;
@@ -143,7 +143,7 @@ fn cmd_edit(
         Some(m) => m,
         None => &entry.username,
     };
-    let pw = if is_prompt {
+    let pw = if is_prompt.0 {
         read_password_from_tty(Some("Password: "))?
     } else {
         entry.password
@@ -197,7 +197,7 @@ fn create(
     conf: Config,
     name: &str,
     username: &str,
-    is_print: bool,
+    is_print: Print,
     notes: Option<&String>,
     pw: &str,
     overwrite: bool,
@@ -233,11 +233,11 @@ fn create(
 }
 
 // Display accounts details for name, and put password on clipboard
-fn show(conf: Config, name: &str, is_visible: bool) -> anyhow::Result<()> {
+fn show(conf: Config, name: &str, is_print: Print) -> anyhow::Result<()> {
     let filename = find(name, conf.dir())?;
     let entry = extract(&filename, conf.decrypt_cmd())?;
     println!("{}", bold(&entry.username));
-    if is_visible {
+    if is_print.0 {
         println!("{}", entry.password);
     } else {
         copy_to_clipboard(&entry.password, conf.clip_cmd())?;

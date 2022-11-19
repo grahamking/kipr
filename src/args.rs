@@ -1,10 +1,9 @@
-#[derive(Debug)]
 pub enum Args {
     Add {
         filepart: String,
         username: Option<String>,
-        is_print: bool,
-        is_prompt: bool,
+        is_print: Print,
+        is_prompt: Prompt,
         notes: Option<String>,
     },
     Del {
@@ -13,19 +12,22 @@ pub enum Args {
     Edit {
         filepart: String,
         username: Option<String>,
-        is_print: bool,
-        is_prompt: bool,
+        is_print: Print,
+        is_prompt: Prompt,
         notes: Option<String>,
     },
     Gen,
     Get {
         filepart: String,
-        is_print: bool,
+        is_print: Print,
     },
     List {
         filepart: Option<String>,
     },
 }
+
+pub struct Print(pub bool);
+pub struct Prompt(pub bool);
 
 pub fn parse_args() -> Args {
     let a = define_args();
@@ -35,7 +37,7 @@ pub fn parse_args() -> Args {
         // Usage: kip <name>
         return Args::Get {
             filepart: f.to_string(),
-            is_print: matches.is_present("is_print"),
+            is_print: Print(matches.is_present("is_print")),
         };
     }
     // Usage: kip cmd [opts]
@@ -45,20 +47,20 @@ pub fn parse_args() -> Args {
         },
         Some(("get", m)) => Args::Get {
             filepart: String::from(m.value_of("filepart").unwrap()),
-            is_print: m.is_present("is_print"),
+            is_print: Print(m.is_present("is_print")),
         },
         Some(("add", m)) => Args::Add {
             filepart: m.value_of("filepart").unwrap().to_string(),
             username: m.value_of("username").map(String::from),
-            is_print: m.is_present("is_print"),
-            is_prompt: m.is_present("is_prompt"),
+            is_print: Print(m.is_present("is_print")),
+            is_prompt: Prompt(m.is_present("is_prompt")),
             notes: m.value_of("notes").map(String::from),
         },
         Some(("edit", m)) => Args::Edit {
             filepart: m.value_of("filepart").unwrap().to_string(),
             username: m.value_of("username").map(String::from),
-            is_print: m.is_present("is_print"),
-            is_prompt: m.is_present("is_prompt"),
+            is_print: Print(m.is_present("is_print")),
+            is_prompt: Prompt(m.is_present("is_prompt")),
             notes: m.value_of("notes").map(String::from),
         },
         Some(("del", m)) => Args::Del {
