@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env::var;
 use std::path::Path;
 
-use configparser::ini::Ini;
+use configparser::ini::{Ini, IniDefault};
 
 const DEFAULT_CONFIG: &str = "
 [gnupg]
@@ -12,8 +12,9 @@ decrypt_cmd:gpg --quiet --decrypt
 [passwords]
 home:~/.kip/passwords
 len:19
+choices:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./;=>?@[]^_`{|}~
 [tools]
-clip: # empty means 'pbcopy' on OSX, 'xclip' elsewhere
+clip:
 ";
 
 #[derive(Debug)]
@@ -21,9 +22,14 @@ pub struct Config(HashMap<String, HashMap<String, String>>);
 
 impl Config {
     pub fn new() -> Config {
+        let mut ini_setup = IniDefault::default();
+        // customise so we can use more passwords.choices characters
+        ini_setup.comment_symbols = vec![];
+        ini_setup.delimiters = vec![':'];
+        let mut ini = Ini::new_from_defaults(ini_setup);
+
         // built-in defaults - we always have these
-        let mut ini = Ini::new();
-        let hm = ini.read(String::from(DEFAULT_CONFIG));
+        let hm = ini.read(DEFAULT_CONFIG.to_string());
 
         let mut c = Config(HashMap::new());
         c.add(hm.unwrap());
@@ -62,6 +68,10 @@ impl Config {
             .unwrap()
             .parse()
             .unwrap()
+    }
+
+    pub fn choices(&self) -> &str {
+        self.0.get("passwords").unwrap().get("choices").unwrap()
     }
 
     pub fn add(&mut self, v: HashMap<String, HashMap<String, Option<String>>>) {

@@ -2,7 +2,8 @@ use std::env::var;
 use std::fs;
 use std::io;
 use std::io::Write;
-use std::path;
+use std::path::Path;
+use std::path::PathBuf;
 use std::process;
 
 use anyhow::anyhow;
@@ -12,11 +13,13 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rpassword::read_password_from_tty;
 
 mod args;
+use args::{parse_args, Args};
 mod config;
+use config::Config;
 
 fn main() -> Result<(), anyhow::Error> {
     let conf = load_config();
-    let args = args::parse_args();
+    let args = parse_args();
     //println!("Args: {:?}", args);
 
     // Ensure our home directory exists
@@ -26,17 +29,16 @@ fn main() -> Result<(), anyhow::Error> {
         println!("Created: {}", d.display());
     }
 
-    let kip = Kip { conf, args };
-    kip.run()?;
+    run(conf, args)?;
 
     Ok(())
 }
 
-fn load_config() -> config::Config {
+fn load_config() -> Config {
     let mut conf_files = Ini::new();
 
     // This includes built-in defaults
-    let mut conf = config::Config::new();
+    let mut conf = Config::new();
 
     // global defaults
     if let Ok(hm) = conf_files.load("/etc/kip/kip.conf") {
@@ -53,260 +55,260 @@ fn load_config() -> config::Config {
     conf
 }
 
-struct Kip {
-    args: args::Args,
-    conf: config::Config,
+fn run(conf: Config, args: args::Args) -> anyhow::Result<()> {
+    match args {
+        Args::Add {
+            filepart,
+            username,
+            is_print,
+            is_prompt,
+            notes,
+        } => cmd_add(conf, &filepart, username, is_print, is_prompt, notes),
+        Args::Del { filepart } => cmd_del(conf, &filepart),
+        Args::Gen => cmd_gen(conf),
+        Args::Get { filepart, is_print } => cmd_get(conf, &filepart, is_print),
+        Args::Edit {
+            filepart,
+            username,
+            is_print,
+            is_prompt,
+            notes,
+        } => cmd_edit(conf, &filepart, username, is_print, is_prompt, notes),
+        Args::List { filepart } => cmd_list(conf, filepart),
+    }
 }
 
-impl Kip {
-    fn run(&self) -> anyhow::Result<()> {
-        match self.args.cmd.as_str() {
-            "get" => self.cmd_get(),
-            "add" => self.cmd_add(),
-            "edit" => self.cmd_edit(),
-            "list" => self.cmd_list(),
-            "del" => self.cmd_del(),
-            "gen" => self.cmd_gen(),
-            _ => Err(anyhow!("Unknown command")),
+// Command to get a password
+fn cmd_get(conf: Config, filepart: &str, is_print: bool) -> anyhow::Result<()> {
+    if let Err(e) = show(conf, filepart, is_print) {
+        eprintln!("get failed: {}", e);
+    }
+    Ok(())
+}
+
+// Command to create a new entry
+fn cmd_add(
+    conf: Config,
+    filepart: &str,
+    username: Option<String>,
+    is_print: bool,
+    is_prompt: bool,
+    notes: Option<String>,
+) -> anyhow::Result<()> {
+    let owned;
+    let username = if username.is_some() {
+        username.as_ref().unwrap()
+    } else {
+        owned = ask("Username: ")?;
+        &owned
+    };
+    let pw = if is_prompt {
+        read_password_from_tty(Some("Password: "))?
+    } else {
+        generate_pw(conf.choices(), conf.pw_len())
+    };
+    create(
+        conf,
+        filepart,
+        username,
+        is_print,
+        notes.as_ref(),
+        &pw,
+        false,
+    )
+}
+
+// Command to generate and print a password, and copy to clipboard.
+// Useful if you need a secure string not attached to an account,
+// or to test kipr's password gen rules.
+fn cmd_gen(conf: Config) -> anyhow::Result<()> {
+    println!("{}", conf.choices());
+    let pw = generate_pw(conf.choices(), conf.pw_len());
+    copy_to_clipboard(&pw, conf.decrypt_cmd())?;
+    println!("{}", pw);
+    Ok(())
+}
+
+// Command to edit an existing entry
+fn cmd_edit(
+    conf: Config,
+    name: &str,
+    username: Option<String>,
+    is_print: bool,
+    is_prompt: bool,
+    notes: Option<String>,
+) -> anyhow::Result<()> {
+    let filename = find(name, conf.dir())?;
+    let entry = extract(&filename, conf.decrypt_cmd())?;
+    let username = match &username {
+        Some(m) => m,
+        None => &entry.username,
+    };
+    let pw = if is_prompt {
+        read_password_from_tty(Some("Password: "))?
+    } else {
+        entry.password
+    };
+    let notes = match &notes {
+        Some(m) => m,
+        None => &entry.notes,
+    };
+    create(
+        conf,
+        &filename.to_string_lossy(),
+        username,
+        is_print,
+        Some(notes),
+        &pw,
+        true,
+    )
+}
+
+// Command to delete an existing entry
+fn cmd_del(conf: Config, name: &str) -> anyhow::Result<()> {
+    let filename = find(name, conf.dir())?;
+    let y_n = ask(&format!("Delete {}? [y|N] ", filename.display()))?;
+    if !y_n.eq_ignore_ascii_case("y") {
+        println!("Not deleted");
+        return Ok(());
+    }
+    fs::remove_file(filename).context("remove_file")
+}
+
+// Command to list accounts
+fn cmd_list(conf: Config, filepart: Option<String>) -> anyhow::Result<()> {
+    let prefix = if filepart.is_some() {
+        filepart.as_ref().unwrap()
+    } else {
+        ""
+    };
+    let list_glob = conf.dir().join(format!("{}*", prefix));
+    println!("Listing {}:", bold(list_glob.to_str().unwrap()));
+    let mut files: Vec<PathBuf> = glob::glob(list_glob.to_str().unwrap())?
+        .filter_map(Result::ok)
+        .collect();
+    files.sort();
+    for f in files {
+        println!("{}", f.as_path().file_name().unwrap().to_string_lossy());
+    }
+    Ok(())
+}
+
+fn create(
+    conf: Config,
+    name: &str,
+    username: &str,
+    is_print: bool,
+    notes: Option<&String>,
+    pw: &str,
+    overwrite: bool,
+) -> anyhow::Result<()> {
+    let n = match notes {
+        None => "",
+        Some(nn) => nn,
+    };
+    let file_contents = format!(
+        "{password}\n{username}\n{notes}\n",
+        password = pw,
+        username = username,
+        notes = n
+    );
+    let enc = execute(conf.encrypt_cmd(), Some(&file_contents), true)?;
+
+    let dest_filename = conf.dir().join(name);
+    if dest_filename.exists() && !overwrite {
+        println!("WARNING: {} already exists.", dest_filename.display());
+        let mut choice = ask("Overwrite name? [y|N]")?;
+        choice.make_ascii_lowercase();
+        if choice != "y" {
+            return Err(anyhow!("Not overwriting"));
         }
     }
 
-    // Command to get a password
-    fn cmd_get(&self) -> anyhow::Result<()> {
-        if let Err(e) = self.show(self.args.filepart.as_ref().unwrap(), self.args.is_print) {
-            eprintln!("get failed: {}", e);
-        }
-        Ok(())
+    let mut enc_file = fs::File::create(dest_filename)?;
+    enc_file.write_all(enc.as_bytes())?;
+
+    // Now show, because often we do this when signing
+    // up for a site, so need pw on clipboard
+    show(conf, name, is_print)
+}
+
+// Display accounts details for name, and put password on clipboard
+fn show(conf: Config, name: &str, is_visible: bool) -> anyhow::Result<()> {
+    let filename = find(name, conf.dir())?;
+    let entry = extract(&filename, conf.decrypt_cmd())?;
+    println!("{}", bold(&entry.username));
+    if is_visible {
+        println!("{}", entry.password);
+    } else {
+        copy_to_clipboard(&entry.password, conf.clip_cmd())?;
+    }
+    println!("{}", entry.notes);
+
+    Ok(())
+}
+
+// Find a file matching 'name', prompting for user's help if needed.
+fn find(name: &str, in_dir: &Path) -> anyhow::Result<PathBuf> {
+    let mut filepath = in_dir.join(name);
+    if filepath.metadata().is_err() {
+        filepath = guess(name, in_dir)?;
+        let basename = filepath.as_path().file_name().unwrap().to_str().unwrap();
+        println!("Guessing {}", bold(basename));
     }
 
-    // Command to create a new entry
-    fn cmd_add(&self) -> anyhow::Result<()> {
-        let owned;
-        let username = if self.args.username.is_some() {
-            self.args.username.as_ref().unwrap()
-        } else {
-            owned = ask("Username: ")?;
-            &owned
-        };
-        let pw = if self.args.is_prompt {
-            read_password_from_tty(Some("Password: "))?
-        } else {
-            generate_pw(self.conf.pw_len())
-        };
-        self.create(
-            self.args.filepart.as_ref().unwrap(),
-            username,
-            self.args.notes.as_ref(),
-            &pw,
-            false,
-        )
-    }
+    Ok(filepath)
+}
 
-    // Command to generate and print a password, and copy to clipboard.
-    // Useful if you need a secure string not attached to an account,
-    // or to test kipr's password gen rules.
-    fn cmd_gen(&self) -> anyhow::Result<()> {
-        let pw = generate_pw(self.conf.pw_len());
-        self.copy_to_clipboard(&pw)?;
-        println!("{}", pw);
-        Ok(())
-    }
-
-    // Command to edit an existing entry
-    fn cmd_edit(&self) -> anyhow::Result<()> {
-        let name = &self.args.filepart.as_ref().unwrap();
-        let filename = self.find(name)?;
-        let entry = match filename.as_ref() {
-            Some(fname) => self.extract(fname)?,
-            None => {
-                return Err(anyhow!("File not found: {}", name));
+// Guess filename from part of name
+fn guess(name: &str, in_dir: &Path) -> anyhow::Result<PathBuf> {
+    let search_glob = in_dir.join(format!("*{}*", name));
+    let mut globs: Vec<PathBuf> = glob::glob(search_glob.to_str().unwrap())?
+        .filter_map(Result::ok)
+        .collect();
+    match globs.len() {
+        0 => Err(anyhow!("No match for: {}", search_glob.display())),
+        1 => Ok(globs.remove(0)),
+        _ => {
+            println!("Did you mean:");
+            for (index, option) in globs.iter().enumerate() {
+                let fname = option.as_path().file_name().unwrap();
+                println!("{} - {}", index, fname.to_str().unwrap())
             }
-        };
-        let filename = filename.unwrap();
-        let username = match &self.args.username {
-            Some(m) => m,
-            None => &entry.username,
-        };
-        let pw = if self.args.is_prompt {
-            read_password_from_tty(Some("Password: "))?
-        } else {
-            entry.password
-        };
-        let notes = match &self.args.notes {
-            Some(m) => m,
-            None => &entry.notes,
-        };
-        self.create(
-            &filename.to_string_lossy(),
-            username,
-            Some(notes),
-            &pw,
-            true,
-        )
-    }
-
-    // Command to delete an existing entry
-    fn cmd_del(&self) -> anyhow::Result<()> {
-        let name = &self.args.filepart.as_ref().unwrap();
-        let filename = self.find(name)?;
-        if filename.is_none() {
-            return Err(anyhow!("File not found: {}", name));
-        }
-        let filename: path::PathBuf = filename.unwrap();
-        let y_n = ask(&format!("Delete {}? [y|N] ", filename.display()))?;
-        if !y_n.eq_ignore_ascii_case("y") {
-            println!("Not deleted");
-            return Ok(());
-        }
-        fs::remove_file(filename).context("remove_file")
-    }
-
-    // Command to list accounts
-    fn cmd_list(&self) -> anyhow::Result<()> {
-        let prefix = if self.args.filepart.is_some() {
-            self.args.filepart.as_ref().unwrap()
-        } else {
-            ""
-        };
-        let list_glob = self.conf.dir().join(format!("{}*", prefix));
-        println!("Listing {}:", bold(list_glob.to_str().unwrap()));
-        let mut files: Vec<path::PathBuf> = glob::glob(list_glob.to_str().unwrap())?
-            .filter_map(Result::ok)
-            .collect();
-        files.sort();
-        for f in files {
-            println!("{}", f.as_path().file_name().unwrap().to_string_lossy());
-        }
-        Ok(())
-    }
-
-    fn create(
-        &self,
-        name: &str,
-        username: &str,
-        notes: Option<&String>,
-        pw: &str,
-        overwrite: bool,
-    ) -> anyhow::Result<()> {
-        let n = match notes {
-            None => "",
-            Some(nn) => nn,
-        };
-        let file_contents = format!(
-            "{password}\n{username}\n{notes}\n",
-            password = pw,
-            username = username,
-            notes = n
-        );
-        let enc = self.encrypt(&file_contents)?;
-
-        let dest_filename = self.conf.dir().join(name);
-        if dest_filename.exists() && !overwrite {
-            println!("WARNING: {} already exists.", dest_filename.display());
-            let mut choice = ask("Overwrite name? [y|N]")?;
-            choice.make_ascii_lowercase();
-            if choice != "y" {
-                return Err(anyhow!("Not overwriting"));
+            io::stdout().write_all(b"Select a choice ? ")?;
+            io::stdout().flush()?;
+            let mut choice_str = String::new();
+            io::stdin().read_line(&mut choice_str).unwrap();
+            let choice_int: usize = choice_str.trim().parse().with_context(|| {
+                format!("The choice must be a number, not '{}'", choice_str.trim())
+            })?;
+            if choice_int >= globs.len() {
+                return Err(anyhow!("Select a number 0-{}", globs.len() - 1));
             }
-        }
-
-        let mut enc_file = fs::File::create(dest_filename)?;
-        enc_file.write_all(enc.as_bytes())?;
-
-        // Now show, because often we do this when signing
-        // up for a site, so need pw on clipboard
-        self.show(name, self.args.is_print)
-    }
-
-    // Display accounts details for name, and put password on clipboard
-    fn show(&self, name: &str, is_visible: bool) -> anyhow::Result<()> {
-        let entry = match self.find(name)? {
-            Some(filename) => self.extract(&filename)?,
-            None => {
-                return Err(anyhow!("File not found: {}", name));
-            }
-        };
-        println!("{}", bold(&entry.username));
-        if is_visible {
-            println!("{}", entry.password);
-        } else {
-            self.copy_to_clipboard(&entry.password)?;
-        }
-        println!("{}", entry.notes);
-
-        Ok(())
-    }
-
-    // Find a file matching 'name', prompting for user's help if needed.
-    fn find(&self, name: &str) -> anyhow::Result<Option<path::PathBuf>> {
-        let mut filepath = self.conf.dir().join(name);
-        if filepath.metadata().is_err() {
-            filepath = self.guess(name)?;
-            let basename = filepath.as_path().file_name().unwrap().to_str().unwrap();
-            println!("Guessing {}", bold(basename));
-        }
-
-        Ok(Some(filepath))
-    }
-
-    // Guess filename from part of name
-    fn guess(&self, name: &str) -> anyhow::Result<path::PathBuf> {
-        let search_glob = self.conf.dir().join(format!("*{}*", name));
-        let mut globs: Vec<path::PathBuf> = glob::glob(search_glob.to_str().unwrap())?
-            .filter_map(Result::ok)
-            .collect();
-        match globs.len() {
-            0 => Err(anyhow!("File not found: {}", name)),
-            1 => Ok(globs.remove(0)),
-            _ => {
-                println!("Did you mean:");
-                for (index, option) in globs.iter().enumerate() {
-                    let fname = option.as_path().file_name().unwrap();
-                    println!("{} - {}", index, fname.to_str().unwrap())
-                }
-                io::stdout().write_all(b"Select a choice ? ")?;
-                io::stdout().flush()?;
-                let mut choice_str = String::new();
-                io::stdin().read_line(&mut choice_str).unwrap();
-                let choice_int: usize = choice_str.trim().parse().with_context(|| {
-                    format!("The choice must be a number, not '{}'", choice_str.trim())
-                })?;
-                if choice_int >= globs.len() {
-                    return Err(anyhow!("Select a number 0-{}", globs.len() - 1));
-                }
-                Ok(globs.remove(choice_int))
-            }
+            Ok(globs.remove(choice_int))
         }
     }
+}
 
-    // Extracts username, password and notes from given file,
-    // and returns as tuple (username, password, notes).
-    fn extract(&self, filename: &path::PathBuf) -> anyhow::Result<Entry> {
-        let enc = fs::read_to_string(filename)?;
-        let contents: String = self.decrypt(&enc)?;
-        let mut parts = contents.split('\n');
-        let password = parts.next().unwrap();
-        let username = parts.next().unwrap();
-        let notes = parts.collect::<Vec<&str>>().join("");
-        Ok(Entry {
-            username: username.to_string(),
-            password: password.to_string(),
-            notes,
-        })
-    }
+// Extracts username, password and notes from given file,
+// and returns as tuple (username, password, notes).
+fn extract(filename: &PathBuf, decrypt_cmd: &str) -> anyhow::Result<Entry> {
+    let enc = fs::read_to_string(filename)?;
+    let contents = execute(decrypt_cmd, Some(&enc), true)?;
+    let mut parts = contents.split('\n');
+    let password = parts.next().unwrap();
+    let username = parts.next().unwrap();
+    let notes = parts.collect::<Vec<&str>>().join("");
+    Ok(Entry {
+        username: username.to_string(),
+        password: password.to_string(),
+        notes,
+    })
+}
 
-    fn encrypt(&self, contents: &str) -> anyhow::Result<String> {
-        execute(self.conf.encrypt_cmd(), Some(contents), true)
-    }
-
-    fn decrypt(&self, contents: &str) -> anyhow::Result<String> {
-        execute(self.conf.decrypt_cmd(), Some(contents), true)
-    }
-
-    // Copy given message to clipboard
-    fn copy_to_clipboard(&self, msg: &str) -> anyhow::Result<String> {
-        execute(self.conf.clip_cmd(), Some(msg), false)
-    }
+// Copy given message to clipboard
+fn copy_to_clipboard(msg: &str, clip_cmd: &str) -> anyhow::Result<String> {
+    execute(clip_cmd, Some(msg), false)
 }
 
 #[derive(Debug)]
@@ -359,14 +361,13 @@ fn ask(msg: &str) -> anyhow::Result<String> {
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).unwrap();
-    Ok(String::from(answer.trim()))
+    Ok(answer.trim().to_string())
 }
 
 // A random password of given length.
 // It uses a-z, A-Z, 0-9 and a subset of the special characters from here:
 // https://owasp.org/www-community/password-special-characters
-fn generate_pw(length: usize) -> String {
-    let choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./:;=>?@[]^_`{|}~";
+fn generate_pw(choices: &str, length: usize) -> String {
     let rng = &mut rand::thread_rng();
     let mut pw = choices.chars().choose_multiple(rng, length);
     pw.shuffle(rng);

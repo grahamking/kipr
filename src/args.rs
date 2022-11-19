@@ -1,11 +1,30 @@
-#[derive(Debug, Default)]
-pub struct Args {
-    pub cmd: String,
-    pub username: Option<String>,
-    pub filepart: Option<String>,
-    pub is_print: bool,
-    pub is_prompt: bool,
-    pub notes: Option<String>,
+#[derive(Debug)]
+pub enum Args {
+    Add {
+        filepart: String,
+        username: Option<String>,
+        is_print: bool,
+        is_prompt: bool,
+        notes: Option<String>,
+    },
+    Del {
+        filepart: String,
+    },
+    Edit {
+        filepart: String,
+        username: Option<String>,
+        is_print: bool,
+        is_prompt: bool,
+        notes: Option<String>,
+    },
+    Gen,
+    Get {
+        filepart: String,
+        is_print: bool,
+    },
+    List {
+        filepart: Option<String>,
+    },
 }
 
 pub fn parse_args() -> Args {
@@ -14,41 +33,38 @@ pub fn parse_args() -> Args {
 
     if let Some(f) = matches.value_of("filepart") {
         // Usage: kip <name>
-        return Args::new_get(String::from(f), matches.is_present("is_print"));
+        return Args::Get {
+            filepart: f.to_string(),
+            is_print: matches.is_present("is_print"),
+        };
     }
     // Usage: kip cmd [opts]
     match matches.subcommand() {
-        Some(("list", m)) => Args::new_list(m.value_of("filepart")),
-        Some(("get", m)) => Args::new_get(
-            String::from(m.value_of("filepart").unwrap()),
-            m.is_present("is_print"),
-        ),
-        Some((add_edit, m)) if add_edit == "add" || add_edit == "edit" => {
-            let mut a = Args {
-                cmd: String::from(add_edit),
-                filepart: Some(String::from(m.value_of("filepart").unwrap())),
-                username: m.value_of("username").map(String::from),
-                is_print: m.is_present("is_print"),
-                is_prompt: m.is_present("is_prompt"),
-                notes: None,
-            };
-            if let Some(n) = m.value_of("notes") {
-                a.notes = Some(String::from(n));
-            }
-            a
-        }
-        Some(("del", m)) => Args {
-            filepart: Some(String::from(m.value_of("filepart").unwrap())),
-            cmd: String::from("del"),
-            username: None,
-            is_print: false,
-            is_prompt: false,
-            notes: None,
+        Some(("list", m)) => Args::List {
+            filepart: m.value_of("filepart").map(String::from),
         },
-        Some(("gen", _)) => Args {
-            cmd: "gen".to_string(),
-            ..Default::default()
+        Some(("get", m)) => Args::Get {
+            filepart: String::from(m.value_of("filepart").unwrap()),
+            is_print: m.is_present("is_print"),
         },
+        Some(("add", m)) => Args::Add {
+            filepart: m.value_of("filepart").unwrap().to_string(),
+            username: m.value_of("username").map(String::from),
+            is_print: m.is_present("is_print"),
+            is_prompt: m.is_present("is_prompt"),
+            notes: m.value_of("notes").map(String::from),
+        },
+        Some(("edit", m)) => Args::Edit {
+            filepart: m.value_of("filepart").unwrap().to_string(),
+            username: m.value_of("username").map(String::from),
+            is_print: m.is_present("is_print"),
+            is_prompt: m.is_present("is_prompt"),
+            notes: m.value_of("notes").map(String::from),
+        },
+        Some(("del", m)) => Args::Del {
+            filepart: m.value_of("filepart").unwrap().to_string(),
+        },
+        Some(("gen", _)) => Args::Gen,
         _ => panic!("unknown command"),
         // maybe: a.print_help()
     }
@@ -160,33 +176,4 @@ Generate and print a password, and copy it to clipboard",
         .subcommand(cmd_list)
         .subcommand(cmd_del)
         .subcommand(cmd_gen)
-}
-
-// TODO: Args should maybe an enum, with different commands having different fields
-
-impl Args {
-    fn new_get(filepart: String, is_print: bool) -> Args {
-        Args {
-            filepart: Some(filepart),
-            cmd: String::from("get"),
-            username: None,
-            is_print,
-            is_prompt: false,
-            notes: None,
-        }
-    }
-    fn new_list(filepart: Option<&str>) -> Args {
-        let mut a = Args {
-            filepart: None,
-            cmd: String::from("list"),
-            username: None,
-            is_print: false,
-            is_prompt: false,
-            notes: None,
-        };
-        if let Some(fp) = filepart {
-            a.filepart = Some(fp.to_string());
-        }
-        a
-    }
 }

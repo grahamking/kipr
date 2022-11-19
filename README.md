@@ -2,7 +2,7 @@
 
 If you live on the command line, this is a simple, fast, secure, and evergreen way to manage your passwords. I use it multiple times a day.
 
-`kip get|add|list|edit|del [filepart] [--username USERNAME] [--notes NOTES] [--prompt] [--print]`
+`kip get|add|list|edit|del|gen [filepart] [--username USERNAME] [--notes NOTES] [--prompt] [--print]`
 
 # INSTALL
 
@@ -21,7 +21,7 @@ Make sure you have a gnupg key pair:
 
 What it does:
 
- 1. Generates a random password
+ 1. Generates a random password. The characters to use are in config 'choices' setting. By default it uses a-z, A-Z, 0-9 and a [subset of these special characters](https://owasp.org/www-community/password-special-characters). See CONFIGURATION section.
  2. Writes username and password to text file `~/.kip/passwords/example.com`
  3. Encrypts and signs it by running `gpg --encrypt --sign --armor`
  4. Copies the new password to your clipboard
@@ -65,7 +65,7 @@ On Ubuntu / Debian: `sudo apt-get install gnupg xclip`
 
 # CONFIGURATION
 
-If you want to use different commands to encrypt / decrypt your files, want longer passwords, etc, you can. Copy this snippet (the built-in default config) to `~/.kip/kip.conf`, and customise it. It's an INI file, using = or : as the delimiter. Make sure the `home` path does not end with a slash.
+If you want to use different commands to encrypt / decrypt your files, want longer passwords, etc, you can. Copy this snippet (the built-in default config) to `~/.kip/kip.conf` or `/etc/kip/kip/conf`, and customise it. It's an INI file using : as the delimiter. Make sure the `home` path does not end with a slash.
 
 ```
 [gnupg]
@@ -75,9 +75,12 @@ decrypt_cmd:gpg --quiet --decrypt
 [passwords]
 home:~/.kip/passwords
 len:19
+choices:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./;=>?@[]^_`{|}~
 [tools]
-clip: # empty means 'pbcopy' on OSX, 'xclip' elsewhere
+clip:
 ```
+
+tools.clip is the command line used to copy a password to the clipboard. It's default is empty which means 'pbcopy' on OSX, 'xclip' elsewhere (Linux).
 
 # NOTES
 
