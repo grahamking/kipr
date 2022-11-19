@@ -122,7 +122,6 @@ fn cmd_add(
 // Useful if you need a secure string not attached to an account,
 // or to test kipr's password gen rules.
 fn cmd_gen(conf: Config) -> anyhow::Result<()> {
-    println!("{}", conf.choices());
     let pw = generate_pw(conf.choices(), conf.pw_len());
     copy_to_clipboard(&pw, conf.decrypt_cmd())?;
     println!("{}", pw);
