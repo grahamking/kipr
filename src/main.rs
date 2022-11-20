@@ -13,7 +13,7 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rpassword::read_password_from_tty;
 
 mod args;
-use args::{parse_args, Args, Print, Prompt};
+use args::{parse_args, AddEditData, Command, GetData, Print};
 mod config;
 use config::Config;
 
@@ -55,64 +55,43 @@ fn load_config() -> Config {
     conf
 }
 
-fn run(conf: Config, args: args::Args) -> anyhow::Result<()> {
+fn run(conf: Config, args: Command) -> anyhow::Result<()> {
+    use Command::*;
     match args {
-        Args::Add {
-            filepart,
-            username,
-            is_print,
-            is_prompt,
-            notes,
-        } => cmd_add(conf, &filepart, username, is_print, is_prompt, notes),
-        Args::Del { filepart } => cmd_del(conf, &filepart),
-        Args::Gen => cmd_gen(conf),
-        Args::Get { filepart, is_print } => cmd_get(conf, &filepart, is_print),
-        Args::Edit {
-            filepart,
-            username,
-            is_print,
-            is_prompt,
-            notes,
-        } => cmd_edit(conf, &filepart, username, is_print, is_prompt, notes),
-        Args::List { filepart } => cmd_list(conf, filepart),
+        Add(data) => cmd_add(conf, data),
+        Del { filepart } => cmd_del(conf, &filepart),
+        Gen => cmd_gen(conf),
+        Get(data) => cmd_get(conf, data),
+        Edit(data) => cmd_edit(conf, data),
+        List { filepart } => cmd_list(conf, filepart),
     }
 }
 
 // Command to get a password
-fn cmd_get(conf: Config, filepart: &str, is_print: Print) -> anyhow::Result<()> {
-    if let Err(e) = show(conf, filepart, is_print) {
+fn cmd_get(conf: Config, data: GetData) -> anyhow::Result<()> {
+    if let Err(e) = show(conf, &data.filepart, data.print) {
         eprintln!("get failed: {}", e);
     }
     Ok(())
 }
 
 // Command to create a new entry
-fn cmd_add(
-    conf: Config,
-    filepart: &str,
-    username: Option<String>,
-    is_print: Print,
-    is_prompt: Prompt,
-    notes: Option<String>,
-) -> anyhow::Result<()> {
-    let owned;
-    let username = if username.is_some() {
-        username.as_ref().unwrap()
-    } else {
-        owned = ask("Username: ")?;
-        &owned
+fn cmd_add(conf: Config, data: AddEditData) -> anyhow::Result<()> {
+    let username = match data.username {
+        Some(u) => u,
+        None => ask("Username: ")?,
     };
-    let pw = if is_prompt.0 {
+    let pw = if data.prompt.is() {
         read_password_from_tty(Some("Password: "))?
     } else {
         generate_pw(conf.choices(), conf.pw_len())
     };
     create(
         conf,
-        filepart,
-        username,
-        is_print,
-        notes.as_ref(),
+        &data.filepart,
+        &username,
+        data.print,
+        data.notes,
         &pw,
         false,
     )
@@ -129,34 +108,27 @@ fn cmd_gen(conf: Config) -> anyhow::Result<()> {
 }
 
 // Command to edit an existing entry
-fn cmd_edit(
-    conf: Config,
-    name: &str,
-    username: Option<String>,
-    is_print: Print,
-    is_prompt: Prompt,
-    notes: Option<String>,
-) -> anyhow::Result<()> {
-    let filename = find(name, conf.dir())?;
+fn cmd_edit(conf: Config, data: AddEditData) -> anyhow::Result<()> {
+    let filename = find(&data.filepart, conf.dir())?;
     let entry = extract(&filename, conf.decrypt_cmd())?;
-    let username = match &username {
+    let username = match &data.username {
         Some(m) => m,
         None => &entry.username,
     };
-    let pw = if is_prompt.0 {
+    let pw = if data.prompt.is() {
         read_password_from_tty(Some("Password: "))?
     } else {
         entry.password
     };
-    let notes = match &notes {
+    let notes = match data.notes {
         Some(m) => m,
-        None => &entry.notes,
+        None => entry.notes,
     };
     create(
         conf,
         &filename.to_string_lossy(),
         username,
-        is_print,
+        data.print,
         Some(notes),
         &pw,
         true,
@@ -176,17 +148,16 @@ fn cmd_del(conf: Config, name: &str) -> anyhow::Result<()> {
 
 // Command to list accounts
 fn cmd_list(conf: Config, filepart: Option<String>) -> anyhow::Result<()> {
-    let prefix = if filepart.is_some() {
-        filepart.as_ref().unwrap()
-    } else {
-        ""
-    };
+    let prefix = filepart.unwrap_or_default();
     let list_glob = conf.dir().join(format!("{}*", prefix));
     println!("Listing {}:", bold(list_glob.to_str().unwrap()));
     let mut files: Vec<PathBuf> = glob::glob(list_glob.to_str().unwrap())?
         .filter_map(Result::ok)
         .collect();
     files.sort();
+    if files.is_empty() {
+        println!("No matches");
+    }
     for f in files {
         println!("{}", f.as_path().file_name().unwrap().to_string_lossy());
     }
@@ -198,14 +169,11 @@ fn create(
     name: &str,
     username: &str,
     is_print: Print,
-    notes: Option<&String>,
+    notes: Option<String>,
     pw: &str,
     overwrite: bool,
 ) -> anyhow::Result<()> {
-    let n = match notes {
-        None => "",
-        Some(nn) => nn,
-    };
+    let n = notes.unwrap_or_default();
     let file_contents = format!(
         "{password}\n{username}\n{notes}\n",
         password = pw,
@@ -237,7 +205,7 @@ fn show(conf: Config, name: &str, is_print: Print) -> anyhow::Result<()> {
     let filename = find(name, conf.dir())?;
     let entry = extract(&filename, conf.decrypt_cmd())?;
     println!("{}", bold(&entry.username));
-    if is_print.0 {
+    if is_print.is() {
         println!("{}", entry.password);
     } else {
         copy_to_clipboard(&entry.password, conf.clip_cmd())?;
@@ -355,6 +323,7 @@ fn bold(msg: &str) -> String {
     format!("\x1b[1m{}\x1b[0m", msg)
 }
 
+// Read from stdin
 fn ask(msg: &str) -> anyhow::Result<String> {
     io::stdout().write_all(msg.as_bytes())?;
     io::stdout().flush()?;

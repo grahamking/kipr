@@ -1,72 +1,78 @@
-pub enum Args {
-    Add {
-        filepart: String,
-        username: Option<String>,
-        is_print: Print,
-        is_prompt: Prompt,
-        notes: Option<String>,
-    },
-    Del {
-        filepart: String,
-    },
-    Edit {
-        filepart: String,
-        username: Option<String>,
-        is_print: Print,
-        is_prompt: Prompt,
-        notes: Option<String>,
-    },
-    Gen,
-    Get {
-        filepart: String,
-        is_print: Print,
-    },
-    List {
-        filepart: Option<String>,
-    },
+pub struct AddEditData {
+    pub filepart: String,
+    pub username: Option<String>,
+    pub print: Print,
+    pub prompt: Prompt,
+    pub notes: Option<String>,
 }
 
-pub struct Print(pub bool);
-pub struct Prompt(pub bool);
+pub struct GetData {
+    pub filepart: String,
+    pub print: Print,
+}
 
-pub fn parse_args() -> Args {
+pub enum Command {
+    Add(AddEditData),
+    Del { filepart: String },
+    Edit(AddEditData),
+    Gen,
+    Get(GetData),
+    List { filepart: Option<String> },
+}
+
+pub struct Print(bool);
+impl Print {
+    pub fn is(&self) -> bool {
+        self.0
+    }
+}
+
+pub struct Prompt(bool);
+impl Prompt {
+    pub fn is(&self) -> bool {
+        self.0
+    }
+}
+
+pub fn parse_args() -> Command {
     let a = define_args();
     let matches = a.get_matches();
 
     if let Some(f) = matches.value_of("filepart") {
         // Usage: kip <name>
-        return Args::Get {
+        return Command::Get(GetData {
             filepart: f.to_string(),
-            is_print: Print(matches.is_present("is_print")),
-        };
+            print: Print(matches.is_present("is_print")),
+        });
     }
     // Usage: kip cmd [opts]
+    use Command::*;
     match matches.subcommand() {
-        Some(("list", m)) => Args::List {
+        Some(("list", m)) => List {
             filepart: m.value_of("filepart").map(String::from),
         },
-        Some(("get", m)) => Args::Get {
-            filepart: String::from(m.value_of("filepart").unwrap()),
-            is_print: Print(m.is_present("is_print")),
-        },
-        Some(("add", m)) => Args::Add {
+        Some(("get", m)) => Get(GetData {
+            filepart: m.value_of("filepart").unwrap().to_string(),
+            print: Print(m.is_present("is_print")),
+        }),
+        Some(("add", m)) => Add(AddEditData {
             filepart: m.value_of("filepart").unwrap().to_string(),
             username: m.value_of("username").map(String::from),
-            is_print: Print(m.is_present("is_print")),
-            is_prompt: Prompt(m.is_present("is_prompt")),
+            print: Print(m.is_present("is_print")),
+            prompt: Prompt(m.is_present("is_prompt")),
             notes: m.value_of("notes").map(String::from),
-        },
-        Some(("edit", m)) => Args::Edit {
+        }),
+        Some(("edit", m)) => Edit(AddEditData {
             filepart: m.value_of("filepart").unwrap().to_string(),
             username: m.value_of("username").map(String::from),
-            is_print: Print(m.is_present("is_print")),
-            is_prompt: Prompt(m.is_present("is_prompt")),
+            print: Print(m.is_present("is_print")),
+            prompt: Prompt(m.is_present("is_prompt")),
             notes: m.value_of("notes").map(String::from),
-        },
-        Some(("del", m)) => Args::Del {
+        }),
+        Some(("del", m)) => Del {
             filepart: m.value_of("filepart").unwrap().to_string(),
         },
-        Some(("gen", _)) => Args::Gen,
+        Some(("gen", _)) => Gen,
         _ => panic!("unknown command"),
         // maybe: a.print_help()
     }
@@ -74,7 +80,7 @@ pub fn parse_args() -> Args {
 
 // 'static lifetime says how long the app name, description etc strings live. We get them from
 // app_from_crate! macro, so they are static.
-fn define_args() -> clap::App<'static> {
+pub fn define_args() -> clap::App<'static> {
     let filepart = clap::Arg::with_name("filepart")
         .help("Filename to act on, or part thereof")
         .required(true);
