@@ -329,7 +329,12 @@ fn ask(msg: &str) -> anyhow::Result<String> {
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).unwrap();
-    Ok(answer.trim().to_string())
+    // trim the carriage return
+    match answer.rfind(|c: char| !c.is_whitespace()) {
+        Some(last_valid) => answer.truncate(last_valid + 1),
+        None => answer.truncate(0), // it's all whitespace
+    }
+    Ok(answer)
 }
 
 // A random password of given length.
