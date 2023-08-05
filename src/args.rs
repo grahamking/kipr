@@ -38,39 +38,39 @@ pub fn parse_args() -> Command {
     let a = define_args();
     let matches = a.get_matches();
 
-    if let Some(f) = matches.value_of("filepart") {
+    if let Some(f) = matches.get_one::<String>("filepart") {
         // Usage: kip <name>
         return Command::Get(GetData {
-            filepart: f.to_string(),
-            print: Print(matches.is_present("is_print")),
+            filepart: f.clone(),
+            print: Print(matches.get_flag("is_print")), // previously `is_present`
         });
     }
     // Usage: kip cmd [opts]
     use Command::*;
     match matches.subcommand() {
         Some(("list", m)) => List {
-            filepart: m.value_of("filepart").map(String::from),
+            filepart: m.get_one::<String>("filepart").cloned(),
         },
         Some(("get", m)) => Get(GetData {
-            filepart: m.value_of("filepart").unwrap().to_string(),
-            print: Print(m.is_present("is_print")),
+            filepart: m.get_one::<String>("filepart").cloned().unwrap(),
+            print: Print(m.get_flag("is_print")),
         }),
         Some(("add", m)) => Add(AddEditData {
-            filepart: m.value_of("filepart").unwrap().to_string(),
-            username: m.value_of("username").map(String::from),
-            print: Print(m.is_present("is_print")),
-            prompt: Prompt(m.is_present("is_prompt")),
-            notes: m.value_of("notes").map(String::from),
+            filepart: m.get_one::<String>("filepart").cloned().unwrap(),
+            username: m.get_one::<String>("username").cloned(),
+            print: Print(m.get_flag("is_print")),
+            prompt: Prompt(m.get_flag("is_prompt")),
+            notes: m.get_one::<String>("notes").cloned(),
         }),
         Some(("edit", m)) => Edit(AddEditData {
-            filepart: m.value_of("filepart").unwrap().to_string(),
-            username: m.value_of("username").map(String::from),
-            print: Print(m.is_present("is_print")),
-            prompt: Prompt(m.is_present("is_prompt")),
-            notes: m.value_of("notes").map(String::from),
+            filepart: m.get_one::<String>("filepart").cloned().unwrap(),
+            username: m.get_one::<String>("username").cloned(),
+            print: Print(m.get_flag("is_print")),
+            prompt: Prompt(m.get_flag("is_prompt")),
+            notes: m.get_one::<String>("notes").cloned(),
         }),
         Some(("del", m)) => Del {
-            filepart: m.value_of("filepart").unwrap().to_string(),
+            filepart: m.get_one::<String>("filepart").cloned().unwrap(),
         },
         Some(("gen", _)) => Gen,
         _ => panic!("unknown command"),
@@ -80,17 +80,18 @@ pub fn parse_args() -> Command {
 
 // 'static lifetime says how long the app name, description etc strings live. We get them from
 // app_from_crate! macro, so they are static.
-pub fn define_args() -> clap::App<'static> {
-    let filepart = clap::Arg::with_name("filepart")
+pub fn define_args() -> clap::Command {
+    let filepart = clap::Arg::new("filepart")
         .help("Filename to act on, or part thereof")
         .required(true);
-    let is_print = clap::Arg::with_name("is_print")
+    let is_print = clap::Arg::new("is_print")
         .long("print")
+        .action(clap::ArgAction::SetTrue)
         .help("Display password instead of copying to clipboard");
 
     // GET
 
-    let cmd_get = clap::SubCommand::with_name("get")
+    let cmd_get = clap::Command::new("get")
         .about(
             "kipr get ebay.com
  Decrypts {home}ebay.com using gpg
@@ -103,7 +104,7 @@ pub fn define_args() -> clap::App<'static> {
 
     // ADD
 
-    let cmd_add = clap::SubCommand::with_name("add")
+    let cmd_add = clap::Command::new("add")
         .about(
             "kipr add ebay.com --username graham_king --notes 'And some notes'
  Generate random password (pwgen -s1 19)
@@ -115,24 +116,26 @@ pub fn define_args() -> clap::App<'static> {
 ",
         )
         .arg(filepart.clone())
+        .arg(is_print.clone())
         .arg(
-            clap::Arg::with_name("username")
+            clap::Arg::new("username")
                 .short('u')
                 .long("username")
-                .takes_value(true)
+                .num_args(0..=1)
                 .help("Username to store. Will prompt if not given."),
         )
         .arg(
-            clap::Arg::with_name("is_prompt")
+            clap::Arg::new("is_prompt")
                 .short('p')
                 .long("prompt")
+                .action(clap::ArgAction::SetTrue)
                 .help("Prompt for password on command line instead of generating it"),
         )
         .arg(
-            clap::Arg::with_name("notes")
+            clap::Arg::new("notes")
                 .short('n')
                 .long("notes")
-                .takes_value(true)
+                .num_args(0..=1)
                 .help("Notes - anything you want"),
         );
 
@@ -145,21 +148,21 @@ Change details in an account file. Only changes the part you provide.",
 
     // LIST
 
-    let cmd_list = clap::SubCommand::with_name("list")
+    let cmd_list = clap::Command::new("list")
         .about(
             "kipr list [filepart]
 List accounts. Same as `ls` in pwd directory.
 ",
         )
         .arg(
-            clap::Arg::with_name("filepart")
+            clap::Arg::new("filepart")
                 .help("Prefix to limit list")
                 .required(false),
         );
 
     // DEL
 
-    let cmd_del = clap::SubCommand::with_name("del")
+    let cmd_del = clap::Command::new("del")
         .about(
             "kipr del <filepart>
 Delete an account file. Same as 'rm' in .kip/passwords/ dir.",
@@ -168,14 +171,14 @@ Delete an account file. Same as 'rm' in .kip/passwords/ dir.",
 
     // GEN
 
-    let cmd_gen = clap::SubCommand::with_name("gen").about(
+    let cmd_gen = clap::Command::new("gen").about(
         "kipr gen
 Generate and print a password, and copy it to clipboard",
     );
 
-    clap::app_from_crate!()
-        .setting(clap::AppSettings::ArgRequiredElseHelp)
-        .setting(clap::AppSettings::SubcommandsNegateReqs)
+    clap::command!()
+        .arg_required_else_help(true)
+        .subcommand_negates_reqs(true)
         .arg(filepart)
         .arg(is_print)
         .subcommand(cmd_get)
