@@ -59,9 +59,9 @@ Delete a password file. [filepart] is the file to delete. You can use rm too!
 
 # DEPENDENCIES
 
-gnupg to encrypt password files, xclip (linux) or pbcopy (OSX) to copy password to clipboard.
+gnupg to encrypt password files, wl-copy (linux) or pbcopy (OSX) to copy password to clipboard.
 
-On Ubuntu / Debian: `sudo apt-get install gnupg xclip`
+On Ubuntu / Debian: `sudo apt-get install gnupg`, wl-copy should already be there
 
 # CONFIGURATION
 
@@ -80,7 +80,7 @@ choices:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,
 clip:
 ```
 
-tools.clip is the command line used to copy a password to the clipboard. It's default is empty which means 'pbcopy' on OSX, 'xclip' elsewhere (Linux).
+tools.clip is the command line used to copy a password to the clipboard. It's default is empty which means 'pbcopy' on OSX, 'wl-copy' elsewhere (Linux).
 
 # NOTES
 

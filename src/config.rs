@@ -56,7 +56,7 @@ impl Config {
         } else if std::env::consts::OS == "macos" {
             "pbcopy"
         } else {
-            "xclip"
+            "wl-copy -p"
         }
     }
 
