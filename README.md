@@ -10,8 +10,28 @@ If you live on the command line, this is a simple, fast, secure, and evergreen w
 - Rust programmers: Clone the repo and `cargo build`.
 - Everyone else: Eh, I dunno. Open a ticket and say what OS you need.
 
-Make sure you have a gnupg key pair:
+Make sure you have an [age](https://age-encryption.org/) key: `age-keygen -o /home/myuser/.ssh/myuser.age.txt` (I put my age key in .ssh for easy backup).
+
+Place this file in `.kip/kip.conf`:
+```
+[gnupg]
+key_fingerprint:
+encrypt_cmd:age -r <age-keygen-public-key> --armor
+decrypt_cmd:age --decrypt -i /home/myuser/.ssh/myuser.age.txt
+[passwords]
+home:~/.kip/passwords-age
+len:19
+choices:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./;=>?@[]^_`{|}~
+[tools]
+clip:
+```
+
+Note the `age` section says `gnupg`, that's correct. Leave `clip` blank for sensible defaults.`
+
+You can also use GnuPG instead, in which case make sure you have a gnupg key pair:
 [GnuPG HOWTO](https://help.ubuntu.com/community/GnuPrivacyGuardHowto).
+
+GnuPG is the old default so it doesn't usually need a config file.
 
 # COMMANDS
 
@@ -59,9 +79,7 @@ Delete a password file. [filepart] is the file to delete. You can use rm too!
 
 # DEPENDENCIES
 
-gnupg to encrypt password files, wl-copy (linux) or pbcopy (OSX) to copy password to clipboard.
-
-On Ubuntu / Debian: `sudo apt-get install gnupg`, wl-copy should already be there
+`age` or `gnupg` to encrypt password files, `wl-copy` (linux) or `pbcopy` (OSX) to copy password to clipboard.
 
 # CONFIGURATION
 
@@ -81,6 +99,36 @@ clip:
 ```
 
 tools.clip is the command line used to copy a password to the clipboard. It's default is empty which means 'pbcopy' on OSX, 'wl-copy' elsewhere (Linux).
+
+The encrypt and decrypt commands must take their input on stdin and write their output to stdout.
+
+# MIGRATING FROM GNUPG to AGE
+
+I recently switched to `age`. Here's how I did it.
+
+1. Install `age` (package manager on all distros) and generate key with `age-keygen`.
+
+2. Copy your existing passwords: `cd .kip`, `cp -r passwords passwords-age`.
+
+3. Use this script to convert them (thanks Claude!), from the `.kip/passwords-age` directory:
+```
+#!/bin/bash
+
+set -e
+
+for file in *; do
+	if [ -f "$file" ]; then
+		gpg -d "${file}" | age -r <age-keygen-public-key> --armor > TMPFILE
+		mv TMPFILE "${file}"
+	fi
+done
+```
+
+I have over 500 password files so it takes a few minutes
+
+4. Create `.kip/kip.conf`. See the start of this README for an example.
+
+That's it! `kip` should work as before. Transparent software FTW!
 
 # NOTES
 
